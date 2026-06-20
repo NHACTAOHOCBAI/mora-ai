@@ -50,7 +50,7 @@ def condense_question(history: List[ChatMessageDto], question: str) -> str:
 def chat_with_document_service(
     context: str,
     question: str,
-    base64_image: Optional[str],
+    base64_images: List[str],
     history: List[ChatMessageDto]
 ) -> DocumentChatResponse:
     condensed_q = condense_question(history, question)
@@ -65,9 +65,9 @@ def chat_with_document_service(
     prompt_text = f"Ngữ cảnh tài liệu:\n{context}\n\nCâu hỏi: {condensed_q}"
     contents = [prompt_text]
     
-    if base64_image:
+    for b64 in base64_images:
         try:
-            image_data = base64.b64decode(base64_image)
+            image_data = base64.b64decode(b64)
             contents.append(
                 types.Part.from_bytes(
                     data=image_data,
@@ -75,7 +75,7 @@ def chat_with_document_service(
                 )
             )
         except Exception as e:
-            raise ValueError(f"Invalid base64 image data: {str(e)}")
+            raise ValueError(f"Invalid base64 image data in list: {str(e)}")
 
     full_prompt = (
         f"[SYSTEM PROMPT]\n{system_instruction}\n\n"

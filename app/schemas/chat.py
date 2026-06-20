@@ -20,6 +20,7 @@ class DocumentChatRequest(BaseModel):
     context: str
     question: str
     base64Image: Optional[str] = None
+    base64Images: List[str] = []
     history: List[ChatMessageDto] = []
 
 class SpaceCitation(BaseModel):

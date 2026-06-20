@@ -12,10 +12,13 @@ router = APIRouter()
 @router.post("/document", response_model=DocumentChatResponse)
 async def chat_with_document(request: DocumentChatRequest):
     try:
+        images = list(request.base64Images) if request.base64Images else []
+        if request.base64Image:
+            images.append(request.base64Image)
         return chat_with_document_service(
             context=request.context,
             question=request.question,
-            base64_image=request.base64Image,
+            base64_images=images,
             history=request.history
         )
     except ValueError as e:
