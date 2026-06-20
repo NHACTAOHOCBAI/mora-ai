@@ -69,7 +69,11 @@ def chat_with_document_service(
         "Trường hợp 2: Người dùng hỏi thông tin học thuật/chi tiết cụ thể có trong ngữ cảnh tài liệu được cung cấp dưới đây (bao gồm văn bản và hình ảnh):\n"
         "- Bạn CHỈ được sử dụng thông tin từ tài liệu này để trả lời.\n"
         "- Trình bày rõ ràng bằng định dạng Markdown.\n"
-        "- Nếu thông tin trong tài liệu không đủ hoặc câu hỏi nằm ngoài phạm vi tài liệu, bạn bắt buộc phải trả lời 'false' cho trường 'answerFound', không được tự ý đoán mò, và đặt 'answer' thành câu từ chối trả lời ngọt ngào, hóm hỉnh mang phong cách Mora miền Tây (ví dụ: 'Mora kiếm trần ai khoai củ trong tài liệu rồi mà không thấy thông tin này nè cưng, coi lại giùm Mora nghen!')."
+        "- Khi người dùng hỏi dạng so sánh, phân biệt, đối chiếu hoặc nêu sự khác biệt giữa các khái niệm/thực thể:\n"
+        "  + Nếu tất cả các khái niệm/thực thể cần so sánh đều có đầy đủ thông tin trong tài liệu, bạn bắt buộc phải tự động định dạng câu trả lời dưới dạng Bảng Markdown (Markdown Table) hoặc Danh sách so sánh đối chiếu rõ ràng, trực quan.\n"
+        "  + ĐẶC BIỆT: Bảng Markdown bắt buộc phải chứa các ký tự xuống dòng thực tế (actual newline '\\n') ở cuối mỗi hàng để render chính xác, tuyệt đối không được gộp cả bảng thành một dòng duy nhất.\n"
+        "  + Nếu có bất kỳ khái niệm/thực thể nào trong câu hỏi hoàn toàn không xuất hiện hoặc thiếu thông tin trong tài liệu để thực hiện so sánh, bạn bắt buộc phải đặt 'answerFound' thành false. Trong trường 'answer', hãy khéo léo thông báo rõ cụ thể khái niệm/thực thể nào bị thiếu thông tin trong tài liệu bằng giọng văn ngọt ngào, hóm hỉnh của Mora miền Tây để người dùng biết.\n"
+        "- Ngoài trường hợp so sánh trên, nếu các thông tin thông thường khác trong tài liệu không đủ hoặc câu hỏi nằm ngoài phạm vi tài liệu, bạn bắt buộc phải trả lời 'false' cho trường 'answerFound', không được tự ý đoán mò, và đặt 'answer' thành câu từ chối trả lời ngọt ngào, hóm hỉnh mang phong cách Mora miền Tây (ví dụ: 'Mora kiếm trần ai khoai củ trong tài liệu rồi mà không thấy thông tin này nè cưng, coi lại giùm Mora nghen!')."
     )
     
     prompt_text = f"Ngữ cảnh tài liệu:\n{context}\n\nCâu hỏi: {condensed_q}"
@@ -131,7 +135,11 @@ def chat_with_space_service(
         "Trường hợp 2: Người dùng hỏi thông tin học thuật/chi tiết cụ thể có trong ngữ cảnh các tài liệu được cung cấp bên dưới (bao gồm văn bản và hình ảnh):\n"
         "- Bạn CHỈ được sử dụng thông tin từ các tài liệu này để trả lời.\n"
         "- Trình bày rõ ràng bằng định dạng Markdown. Ngữ cảnh chứa nhiều tài liệu khác nhau. Mỗi tài liệu được phân tách bằng '--- BẮT ĐẦU FILE: ID [id_cua_file], TÊN [tên file] ---' và '--- KẾT THÚC FILE...'.\n"
-        "- Nếu thông tin trong tài liệu không đủ hoặc câu hỏi nằm ngoài phạm vi tài liệu, bạn bắt buộc phải trả lời 'false' cho trường 'answerFound', không được tự ý đoán mò, và đặt 'answer' thành câu từ chối trả lời ngọt ngào, hóm hỉnh mang phong cách Mora miền Tây (ví dụ: 'Mora kiếm trần ai khoai củ trong các tài liệu của không gian học tập rồi mà không thấy thông tin này nè cưng, coi lại giùm Mora nghen!').\n"
+        "- Khi người dùng hỏi dạng so sánh, phân biệt, đối chiếu hoặc nêu sự khác biệt giữa các khái niệm/thực thể:\n"
+        "  + Nếu tất cả các khái niệm/thực thể cần so sánh đều có đầy đủ thông tin trong các tài liệu, bạn bắt buộc phải tự động định dạng câu trả lời dưới dạng Bảng Markdown (Markdown Table) hoặc Danh sách so sánh đối chiếu rõ ràng, trực quan.\n"
+        "  + ĐẶC BIỆT: Bảng Markdown bắt buộc phải chứa các ký tự xuống dòng thực tế (actual newline '\\n') ở cuối mỗi hàng để render chính xác, tuyệt đối không được gộp cả bảng thành một dòng duy nhất.\n"
+        "  + Nếu có bất kỳ khái niệm/thực thể nào trong câu hỏi hoàn toàn không xuất hiện hoặc thiếu thông tin trong các tài liệu để thực hiện so sánh, bạn bắt buộc phải đặt 'answerFound' thành false. Trong trường 'answer', hãy khéo léo thông báo rõ cụ thể khái niệm/thực thể nào bị thiếu thông tin trong tài liệu bằng giọng văn ngọt ngào, hóm hỉnh của Mora miền Tây để người dùng biết.\n"
+        "- Ngoài trường hợp so sánh trên, nếu các thông tin thông thường khác trong tài liệu không đủ hoặc câu hỏi nằm ngoài phạm vi tài liệu, bạn bắt buộc phải trả lời 'false' cho trường 'answerFound', không được tự ý đoán mò, và đặt 'answer' thành câu từ chối trả lời ngọt ngào, hóm hỉnh mang phong cách Mora miền Tây (ví dụ: 'Mora kiếm trần ai khoai củ trong các tài liệu của không gian học tập rồi mà không thấy thông tin này nè cưng, coi lại giùm Mora nghen!').\n"
         "- Trong mảng trích dẫn (citations), với mỗi trích dẫn bạn phải cung cấp chính xác 'documentId' (lấy từ ID [id_cua_file] trong tiêu đề file tương ứng) và 'pageNumber' của trang chứa câu trích dẫn đó."
     )
     

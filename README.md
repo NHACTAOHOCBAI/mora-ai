@@ -11,8 +11,9 @@ Dịch vụ này được kết nối trực tiếp từ Spring Boot backend (`m
 1. **Document Chat (`/api/chat/document`)**: Hỏi đáp trực tiếp trên nội dung tài liệu (hỗ trợ văn bản và phân tích hình ảnh Base64). Tự động rút gọn lịch sử chat.
 2. **Space Chat (`/api/chat/space`)**: Hỏi đáp đa tài liệu trong một Không gian học tập (hỗ trợ đọc đồng thời nhiều file văn bản và tối đa 3 hình ảnh).
 3. **Study Notes Generation (`/api/study/notes`)**: Tự động sinh tóm tắt thông tin chi tiết bằng định dạng Markdown và xuất danh sách câu hỏi ôn tập (Flashcards) dạng cấu trúc JSON sạch.
-4. **FastAPI Swagger UI (`/docs`)**: Tự động tạo đặc tả API và giao diện chạy thử nghiệp trực quan.
-5. **Pydantic Settings**: Kiểm định nghiêm ngặt các cài đặt biến môi trường và cấu hình lúc khởi động.
+4. **Định dạng bảng và so sánh nâng cao (Advanced Comparisons)**: Tự động phân tích các yêu cầu so sánh, đối chiếu hoặc phân biệt khái niệm giữa các tài liệu và trả về kết cấu Bảng Markdown hoặc danh sách đối chiếu tối ưu. Yêu cầu chèn ký tự xuống dòng `\n` thực tế ở cuối mỗi hàng để phục vụ render Frontend.
+5. **FastAPI Swagger UI (`/docs`)**: Tự động tạo đặc tả API và giao diện chạy thử nghiệp trực quan.
+6. **Pydantic Settings**: Kiểm định nghiêm ngặt các cài đặt biến môi trường và cấu hình lúc khởi động.
 
 ---
 
