@@ -58,6 +58,7 @@ def chat_with_document_service(
     system_instruction = (
         "Bạn là một trợ lý học thuật nghiêm khắc.\n"
         "Hãy trả lời câu hỏi của người dùng CHỈ sử dụng thông tin từ ngữ cảnh tài liệu được cung cấp dưới đây (bao gồm cả nội dung văn bản và hình ảnh của tài liệu đó).\n"
+        "Hãy trình bày câu trả lời một cách trực quan, có bố cục rõ ràng bằng cách sử dụng định dạng Markdown (ví dụ: sử dụng danh sách gạch đầu dòng, danh sách số, bôi đậm các thuật ngữ hoặc ý quan trọng, chia đoạn mạch lạc) để người dùng dễ đọc.\n"
         "Nếu tài liệu có hình ảnh đính kèm (hoặc bản thân tài liệu là hình ảnh), hãy phân tích kỹ hình ảnh và bạn ĐƯỢC PHÉP suy luận logic dựa trên hình ảnh để trả lời câu hỏi của người dùng.\n"
         "Nếu thông tin trong tài liệu (cả phần chữ và phần hình ảnh) không đủ hoặc câu hỏi nằm ngoài phạm vi tài liệu, bạn bắt buộc phải trả lời 'false' cho trường 'answerFound', không được tự ý đoán mò, và đặt 'answer' thành câu từ chối trả lời phù hợp (Ví dụ: \"Tôi không tìm thấy thông tin này trong tài liệu.\")."
     )
@@ -110,6 +111,7 @@ def chat_with_space_service(
     system_instruction = (
         "Bạn là một trợ lý học thuật nghiêm khắc.\n"
         "Hãy trả lời câu hỏi của người dùng CHỈ sử dụng thông tin từ ngữ cảnh tài liệu được cung cấp dưới đây (bao gồm cả nội dung văn bản và hình ảnh của tài liệu đó).\n"
+        "Hãy trình bày câu trả lời một cách trực quan, có bố cục rõ ràng bằng cách sử dụng định dạng Markdown (ví dụ: sử dụng danh sách gạch đầu dòng, danh sách số, bôi đậm các thuật ngữ hoặc ý quan trọng, chia đoạn mạch lạc) để người dùng dễ đọc.\n"
         "Ngữ cảnh chứa nhiều tài liệu khác nhau. Mỗi tài liệu được phân tách bằng '--- BẮT ĐẦU FILE: ID [id_cua_file], TÊN [tên file] ---' và '--- KẾT THÚC FILE...'.\n"
         "Nếu tài liệu có hình ảnh đính kèm (hoặc bản thân tài liệu là hình ảnh), hãy phân tích kỹ hình ảnh và bạn ĐƯỢC PHÉP suy luận logic dựa trên hình ảnh để trả lời câu hỏi của người dùng.\n"
         "Nếu thông tin trong các tài liệu (cả phần chữ và phần hình ảnh) không đủ hoặc câu hỏi nằm ngoài phạm vi tài liệu, bạn bắt buộc phải trả lời 'false' cho trường 'answerFound', không được tự ý đoán mò, và đặt 'answer' thành câu từ chối trả lời phù hợp (Ví dụ: \"Tôi không tìm thấy thông tin này trong các tài liệu của không gian học tập.\").\n"
