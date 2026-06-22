@@ -1,3 +1,19 @@
+# Monkey patch for Ragas compatibility with langchain_community 0.4.x
+import sys
+import types
+try:
+    from langchain_google_vertexai import ChatVertexAI
+    # Create dummy modules
+    chat_models_module = types.ModuleType("langchain_community.chat_models")
+    vertexai_module = types.ModuleType("langchain_community.chat_models.vertexai")
+    vertexai_module.ChatVertexAI = ChatVertexAI
+    
+    # Register in sys.modules
+    sys.modules["langchain_community.chat_models.vertexai"] = vertexai_module
+    sys.modules["langchain_community.chat_models"] = chat_models_module
+except Exception:
+    pass
+
 from fastapi import FastAPI
 from app.api.v1.api import api_router
 
