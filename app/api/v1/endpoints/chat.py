@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from loguru import logger
 from app.schemas.chat import (
     DocumentChatRequest,
     DocumentChatResponse,
@@ -22,8 +23,10 @@ async def chat_with_document(request: DocumentChatRequest):
             history=request.history
         )
     except ValueError as e:
+        logger.warning(f"Validation error in chat_with_document: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.error(f"Error in chat_with_document: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Gemini API Error: {str(e)}")
 
 @router.post("/space", response_model=SpaceChatResponse)
@@ -36,6 +39,8 @@ async def chat_with_space(request: SpaceChatRequest):
             history=request.history
         )
     except ValueError as e:
+        logger.warning(f"Validation error in chat_with_space: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.error(f"Error in chat_with_space: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Gemini API Error: {str(e)}")

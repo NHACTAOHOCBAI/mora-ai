@@ -1,6 +1,7 @@
 import base64
 import json
 from typing import List, Optional
+from loguru import logger
 from google import genai
 from google.genai import types
 from app.core.config import settings
@@ -18,6 +19,7 @@ def condense_question(history: List[ChatMessageDto], question: str) -> str:
     if not history:
         return question
     
+    logger.info("Condensing question based on chat history")
     history_str = ""
     for msg in history:
         role = "User" if msg.sender.lower() == "user" else "Assistant"
@@ -44,7 +46,7 @@ def condense_question(history: List[ChatMessageDto], question: str) -> str:
         rewritten = response.text.strip() if response.text else question
         return rewritten if rewritten else question
     except Exception as e:
-        print(f"Failed to condense question: {e}")
+        logger.error(f"Failed to condense question: {e}", exc_info=True)
         return question
 
 def chat_with_document_service(
@@ -53,6 +55,7 @@ def chat_with_document_service(
     base64_images: List[str],
     history: List[ChatMessageDto]
 ) -> DocumentChatResponse:
+    logger.info(f"Chatting with document. Question: {question}, base64 images count: {len(base64_images)}")
     condensed_q = condense_question(history, question)
     
     system_instruction = (
@@ -119,6 +122,7 @@ def chat_with_space_service(
     base64_images: List[str],
     history: List[ChatMessageDto]
 ) -> SpaceChatResponse:
+    logger.info(f"Chatting with space. Question: {question}, base64 images count: {len(base64_images)}")
     condensed_q = condense_question(history, question)
 
     system_instruction = (
@@ -181,6 +185,7 @@ def chat_with_space_service(
     return res_obj
 
 def generate_study_notes_service(context: str) -> StudyNotesResponse:
+    logger.info("Generating study notes from document context")
     system_instruction = (
         "Bạn là một chuyên gia tóm tắt tài liệu và giảng dạy học thuật.\n"
         "Nhiệm vụ của bạn là đọc nội dung tài liệu được cung cấp và sinh ra 2 phần:\n"
