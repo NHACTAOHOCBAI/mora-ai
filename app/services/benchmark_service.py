@@ -12,61 +12,7 @@ from app.core.config import settings
 from app.schemas.benchmark import BenchmarkEvaluateRequest, BenchmarkEvaluateResponse, BenchmarkDetailResponse
 from app.services.gemini_service import chat_with_document_service
 
-# Mẫu ngữ cảnh và hình ảnh giả định cho việc kiểm thử RAG
-MOCK_CONTEXT = (
-    "Mora là một nền tảng hỗ trợ học tập thông minh tích hợp trí tuệ nhân tạo (AI).\n"
-    "Hệ thống cho phép người dùng tải lên tài liệu học tập (PDF, Hình ảnh), tự động tóm tắt nội dung "
-    "và tạo ra các câu hỏi ôn tập (Flashcards). Mora sử dụng PostgreSQL với extension pgvector làm "
-    "Cơ sở dữ liệu Vector để lưu trữ và tìm kiếm ngữ cảnh tài liệu tương đồng.\n"
-    "Hệ thống AI của Mora được xây dựng trên nền tảng Gemini API của Google. Đối với các tác vụ thông thường, "
-    "Mora sử dụng mô hình gemini-1.5-flash để cân bằng giữa chi phí và tốc độ phản hồi. Đối với tác vụ chấm điểm "
-    "đánh giá chất lượng (Benchmark), hệ thống sử dụng mô hình gemini-2.5-flash làm trọng tài."
-)
 
-# Mock base64 image (a tiny transparent pixel)
-MOCK_IMAGE_BASE64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
-)
-
-def execute_rag_pipeline(question: str, approach_name: str) -> Dict[str, Any]:
-    """
-    Chạy pipeline RAG thực tế dựa theo hướng tiếp cận (approach_name)
-    để đo lường và so sánh hiệu năng của các giải pháp khác nhau.
-    """
-    start_time = time.time()
-    
-    # Giả lập các hướng tiếp cận khác nhau để xử lý ảnh hoặc prompt
-    base64_images = [MOCK_IMAGE_BASE64]
-    
-    if "With_Image_Filtering" in approach_name:
-        # Hướng tiếp cận: Lọc bỏ hình ảnh để giảm chi phí/thời gian nếu câu hỏi không cần ảnh
-        logger.info(f"[{approach_name}] Áp dụng lọc ảnh: loại bỏ ảnh ra khỏi request")
-        base64_images = []
-    elif "No_Images" in approach_name:
-        logger.info(f"[{approach_name}] Chạy cấu hình không dùng ảnh")
-        base64_images = []
-    else:
-        logger.info(f"[{approach_name}] Giữ nguyên hình ảnh mặc định")
-
-    # Gọi hàm xử lý chat thực tế từ gemini_service
-    # Ở đây chúng ta sử dụng ngữ cảnh học tập mẫu
-    chat_response = chat_with_document_service(
-        context=MOCK_CONTEXT,
-        question=question,
-        base64_images=base64_images,
-        history=[]
-    )
-    
-    latency_ms = int((time.time() - start_time) * 1000)
-    
-    # Giả lập RAG Contexts trả về cho Ragas đánh giá
-    retrieved_contexts = [MOCK_CONTEXT]
-    
-    return {
-        "generated_answer": chat_response.answer,
-        "retrieved_contexts": retrieved_contexts,
-        "latency_ms": latency_ms
-    }
 
 def run_ragas_evaluation(request: BenchmarkEvaluateRequest) -> BenchmarkEvaluateResponse:
     logger.info(f"Bắt đầu chạy đánh giá Ragas cho hướng tiếp cận: {request.approach_name}")
@@ -94,23 +40,31 @@ def run_ragas_evaluation(request: BenchmarkEvaluateRequest) -> BenchmarkEvaluate
     
     details: List[BenchmarkDetailResponse] = []
     
-    # 1. Chạy từng test case trong bộ dataset
+    # 1. Thu thập dữ liệu từ request dataset đã qua xử lý thực tế ở Backend
     for item in request.dataset:
-        logger.info(f"Đang xử lý câu hỏi: {item.question}")
-        rag_result = execute_rag_pipeline(item.question, request.approach_name)
+        logger.info(f"Đang chuẩn bị đánh giá Ragas cho câu hỏi: {item.question}")
         
+        # Nếu chưa được backend xử lý đầy đủ, gán giá trị mặc định để tránh crash
+        generated_answer = item.generated_answer if item.generated_answer else "Không có câu trả lời."
+        retrieved_contexts = item.retrieved_contexts if item.retrieved_contexts else ["Không có ngữ cảnh."]
+        latency_ms = item.latency_ms if item.latency_ms else 0
+
+        logger.info(f" -> Ngữ cảnh đã truy xuất (retrieved_contexts): {retrieved_contexts}")
+        logger.info(f" -> Câu trả lời đã sinh (generated_answer): {generated_answer}")
+        logger.info(f" -> Thời gian phản hồi (latency): {latency_ms} ms")
+
         questions.append(item.question)
-        generated_answers.append(rag_result["generated_answer"])
-        retrieved_contexts_list.append(rag_result["retrieved_contexts"])
+        generated_answers.append(generated_answer)
+        retrieved_contexts_list.append(retrieved_contexts)
         ground_truths.append(item.ground_truth)
-        latencies.append(rag_result["latency_ms"])
+        latencies.append(latency_ms)
         
         # Tạo thông tin chi tiết tạm thời (chưa có điểm Ragas)
         details.append(BenchmarkDetailResponse(
             question=item.question,
-            retrieved_contexts=json.dumps(rag_result["retrieved_contexts"], ensure_ascii=False),
-            generated_answer=rag_result["generated_answer"],
-            latencyMs=rag_result["latency_ms"],
+            retrieved_contexts=json.dumps(retrieved_contexts, ensure_ascii=False),
+            generated_answer=generated_answer,
+            latencyMs=latency_ms,
             faithfulness=0.0,
             answerRelevance=0.0,
             contextPrecision=0.0,
