@@ -10,7 +10,6 @@ from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmb
 
 from app.core.config import settings
 from app.schemas.benchmark import BenchmarkEvaluateRequest, BenchmarkEvaluateResponse, BenchmarkDetailResponse
-from app.services.gemini_service import chat_with_document_service
 
 
 
