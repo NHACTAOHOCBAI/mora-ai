@@ -17,6 +17,7 @@ class BenchmarkDetailResponse(BaseModel):
     question: str
     retrieved_contexts: str
     generated_answer: str
+    groundTruth: str
     latencyMs: int
     faithfulness: float
     answerRelevance: float

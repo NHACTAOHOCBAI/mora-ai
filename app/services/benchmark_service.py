@@ -64,6 +64,7 @@ def run_ragas_evaluation(request: BenchmarkEvaluateRequest) -> BenchmarkEvaluate
             question=item.question,
             retrieved_contexts=json.dumps(retrieved_contexts, ensure_ascii=False),
             generated_answer=generated_answer,
+            groundTruth=item.ground_truth,
             latencyMs=latency_ms,
             faithfulness=0.0,
             answerRelevance=0.0,
