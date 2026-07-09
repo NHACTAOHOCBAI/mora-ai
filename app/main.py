@@ -27,3 +27,12 @@ app = FastAPI(
 
 # Đăng ký router tổng hợp với prefix /api để giữ nguyên tương thích URL với backend
 app.include_router(api_router, prefix="/api")
+
+from app.core.broker import event_broker
+from app.services.multi_agent_service import orchestrator
+
+@app.on_event("startup")
+def startup_event():
+    # Khởi chạy consumer RabbitMQ bất đồng bộ trong thread riêng
+    event_broker.start_consumer(orchestrator.orchestrate)
+

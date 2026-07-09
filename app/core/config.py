@@ -8,6 +8,11 @@ class Settings(BaseSettings):
     gemini_evaluator_embeddings_model_name: str = "models/gemini-embedding-2"
     gemini_temperature: float = 0.0
 
+    rabbitmq_host: str = "localhost"
+    rabbitmq_port: int = 5672
+    rabbitmq_user: str = "guest"
+    rabbitmq_password: str = "guest"
+
     # Cấu hình đọc từ file .env của backend hoặc file .env cục bộ của python
     model_config = SettingsConfigDict(
         env_file=(

@@ -13,3 +13,4 @@ langchain-google-genai
 langchain-community
 langchain-google-vertexai
 docling
+pika
