@@ -15,6 +15,7 @@ class ChatRequest(BaseModel):
     question: str
     context: List[ChatContextItem]
     history: List[ChatHistoryItem]
+    chat_summary: Optional[str] = None
 
 class Citation(BaseModel):
     pageNumber: int
@@ -27,3 +28,10 @@ class ChatResponse(BaseModel):
     citations: List[Citation]
     condensedQuestion: Optional[str] = None
     promptSent: Optional[str] = None
+
+class ChatSummarizeRequest(BaseModel):
+    history: List[ChatHistoryItem]
+    previous_summary: Optional[str] = None
+
+class ChatSummarizeResponse(BaseModel):
+    summary: str
