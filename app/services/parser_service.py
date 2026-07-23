@@ -35,18 +35,29 @@ def describe_image_with_gemini(client: genai.Client, image_bytes: bytes, ext: st
         "Nếu là hình vẽ minh họa, hãy mô tả chi tiết đối tượng vẽ và ý nghĩa của nó."
     )
 
-    try:
-        logger.info(f"[Trang {page_num}] Đang gửi ảnh chụp {source_type} ({len(image_bytes)} bytes) sang Gemini Vision...")
-        response = client.models.generate_content(
-            model=settings.gemini_model_name,
-            contents=[image_part, prompt]
-        )
-        caption = response.text
-        logger.info(f"[Trang {page_num}] Nhận phản hồi mô tả sơ đồ từ Gemini Vision thành công (dài {len(caption)} ký tự).")
-        return caption
-    except Exception as e:
-        logger.error(f"[Trang {page_num}] Lỗi khi gọi Gemini Vision để mô tả {source_type}: {e}")
-        return ""
+    # Parse fallback model list
+    model_list = [m.strip() for m in settings.gemini_parser_model_list.split(",") if m.strip()]
+    if not model_list:
+        model_list = [settings.gemini_model_name]
+
+    last_error = None
+    for idx, model_name in enumerate(model_list):
+        try:
+            logger.info(f"[Trang {page_num}] Đang gửi ảnh chụp {source_type} ({len(image_bytes)} bytes) sang Gemini Vision sử dụng model {model_name}...")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=[image_part, prompt]
+            )
+            caption = response.text
+            logger.info(f"[Trang {page_num}] Nhận phản hồi mô tả sơ đồ từ Gemini Vision thành công qua model {model_name} (dài {len(caption)} ký tự).")
+            return caption
+        except Exception as e:
+            last_error = e
+            logger.warn(f"[Trang {page_num}] Lỗi khi gọi Gemini Vision với model {model_name}: {e}. "
+                        f"{'Đang thử model tiếp theo...' if idx < len(model_list) - 1 else 'Tất cả các model dự phòng đều thất bại.'}")
+
+    logger.error(f"[Trang {page_num}] Không thể mô tả {source_type} sau khi thử tất cả các model. Lỗi cuối cùng: {last_error}")
+    return ""
 
 def parse_pdf_layout_and_diagrams(pdf_bytes: bytes) -> list:
     logger.info("========================================= MORA DOCLING PARSING START =========================================")
