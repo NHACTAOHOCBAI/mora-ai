@@ -43,6 +43,50 @@ mora-ai/
 
 ---
 
+## Kiến trúc Chatbot (Multi-Agent)
+
+Hệ thống chatbot trong Mora sử dụng kiến trúc **Multi-Agent** đồng bộ để điều hướng, sinh câu trả lời và kiểm định chất lượng phản hồi trước khi trả về cho người dùng.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    FE (React)->>BE (Spring Boot): POST /api/chat/space
+    Note over BE (Spring Boot): Lấy context trang tài liệu từ DB<br/>Lưu tin nhắn User vào DB
+    BE (Spring Boot)->>AI Service (FastAPI): POST /api/chat (Question, Context, History, Summary)
+    
+    Note over AI Service (FastAPI): Vận hành Multi-Agent Orchestrator
+    AI Service (FastAPI)->>Gemini: 1. Router Agent (Phân loại intent: RAG hoặc GENERAL)
+    Gemini-->>AI Service (FastAPI): Trả về intent
+
+    alt Intent = RAG (Hỏi đáp dựa trên tài liệu)
+        AI Service (FastAPI)->>Gemini: 2. Synthesis Agent (Tổng hợp câu trả lời dựa trên context)
+        Gemini-->>AI Service (FastAPI): Trả về câu trả lời + Trích dẫn nguồn (Citations JSON)
+        AI Service (FastAPI)->>Gemini: 3. Evaluator Agent (QC Check chống bịa đặt / hallucination)
+        Gemini-->>AI Service (FastAPI): Trả về điểm trung thực (Faithfulness Score)
+        Note over AI Service (FastAPI): Nếu score < 0.7: Sinh lại câu trả lời (Tối đa 2 lần)
+    else Intent = GENERAL (Chitchat ôn tập chung)
+        AI Service (FastAPI)->>Gemini: 2. General Chat Agent (Trả lời bằng tri thức sẵn có)
+        Gemini-->>AI Service (FastAPI): Trả về câu trả lời
+    end
+
+    AI Service (FastAPI)-->>BE (Spring Boot): Trả về kết quả cuối cùng
+    Note over BE (Spring Boot): Lưu tin nhắn Assistant vào DB
+    BE (Spring Boot)-->>FE (React): Trả về câu trả lời hoàn chỉnh
+```
+
+### 1. Vai trò của từng Agent
+* **Router Agent**: Nhận câu hỏi mới nhất, tóm tắt lịch sử hội thoại cũ và 4 câu thoại gần nhất. Agent sử dụng Gemini API để phân loại thông minh câu hỏi thuộc nhóm **RAG** (câu hỏi học thuật, cần tra cứu trực tiếp trong tài liệu của Space) hay **GENERAL** (câu hỏi giao tiếp, giải toán chung, dịch thuật, viết code chung không cần context tài liệu).
+* **Retrieval Agent**: Tiếp nhận các trang ngữ cảnh thô được truyền từ Backend sang và chọn lọc/sắp xếp các đoạn thông tin có giá trị nhất trước khi đưa vào Agent tổng hợp.
+* **Synthesis Agent**: Chịu trách nhiệm tổng hợp thông tin, ghép câu hỏi mới, ngữ cảnh được lọc, lịch sử ngắn hạn và dài hạn để tạo ra câu trả lời chi tiết. Nếu xử lý luồng RAG, Agent bắt buộc phải xuất ra các **trích dẫn cụ thể (Citations)** có số trang và câu trích nguyên văn dưới dạng JSON cấu trúc.
+* **Evaluator Agent (QC Check)**: Đóng vai trò kiểm tra chất lượng. Agent nhận câu trả lời được sinh ra và đối chiếu trực tiếp với ngữ cảnh tài liệu gốc để phát hiện lỗi bịa đặt thông tin (hallucination). Nếu điểm tin cậy dưới `0.7`, hệ thống sẽ kích hoạt *Synthesis Agent* sinh lại câu trả lời mới để đảm bảo độ trung thực tối đa.
+
+### 2. Cơ chế quản lý Bộ nhớ (Memory Management)
+Để cân bằng giữa chi phí token, giới hạn ngữ cảnh của LLM và khả năng ghi nhớ thông tin, chatbot kết hợp 2 lớp bộ nhớ:
+* **Bộ nhớ ngắn hạn (Short-term Memory)**: AI Service tự động cắt lấy **6 tin nhắn gần nhất** (`history[-6:]`) để chuyển tiếp trực tiếp vào prompt của LLM.
+* **Bộ nhớ dài hạn (Long-term Memory)**: Sau mỗi lượt hội thoại thành công, Spring Boot backend sẽ kích hoạt chạy ngầm gọi AI Service tóm tắt nội dung hội thoại mới và cập nhật bản tóm tắt (`chatSummary` giới hạn dưới 150 từ) vào DB. Bản tóm tắt này luôn được gửi kèm trong mọi lượt hỏi tiếp theo để giúp AI hiểu được chủ đề thảo luận dài hạn.
+
+---
+
 ## Yêu cầu hệ thống
 
 * Python 3.10 trở lên.
