@@ -14,7 +14,7 @@ from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption, DocumentStream
 from docling_core.types.doc import PictureItem
 
-def describe_image_with_gemini(client: genai.Client, image_bytes: bytes, ext: str, page_num: int, source_type: str) -> str:
+def describe_image_with_gemini(client: genai.Client, image_bytes: bytes, ext: str, page_num: int, source_type: str, parser_model: str = None) -> str:
     # Map extension to mime type
     mime_type = "image/png"
     if ext.lower() in ["jpg", "jpeg"]:
@@ -36,9 +36,12 @@ def describe_image_with_gemini(client: genai.Client, image_bytes: bytes, ext: st
     )
 
     # Parse fallback model list
-    model_list = [m.strip() for m in settings.gemini_parser_model_list.split(",") if m.strip()]
-    if not model_list:
-        model_list = [settings.gemini_model_name]
+    if parser_model:
+        model_list = [parser_model.strip()]
+    else:
+        model_list = [m.strip() for m in settings.gemini_parser_model_list.split(",") if m.strip()]
+        if not model_list:
+            model_list = [settings.gemini_model_name]
 
     last_error = None
     for idx, model_name in enumerate(model_list):
@@ -59,11 +62,13 @@ def describe_image_with_gemini(client: genai.Client, image_bytes: bytes, ext: st
     logger.error(f"[Trang {page_num}] Không thể mô tả {source_type} sau khi thử tất cả các model. Lỗi cuối cùng: {last_error}")
     return ""
 
-def parse_pdf_layout_and_diagrams(pdf_bytes: bytes) -> list:
+def parse_pdf_layout_and_diagrams(pdf_bytes: bytes, api_key: str = None, parser_model: str = None) -> list:
     logger.info("========================================= MORA DOCLING PARSING START =========================================")
     logger.info(f"Bắt đầu phân tích cấu trúc PDF bằng IBM Docling. Kích thước file: {len(pdf_bytes)} bytes")
     
-    client = genai.Client(api_key=settings.gemini_api_key)
+    client = None
+    if api_key:
+        client = genai.Client(api_key=api_key)
     parsed_pages = []
 
     try:
@@ -119,16 +124,18 @@ def parse_pdf_layout_and_diagrams(pdf_bytes: bytes) -> list:
                             pil_img.save(img_byte_arr, format='PNG')
                             img_bytes = img_byte_arr.getvalue()
 
-                            # Gọi Gemini mô tả hình ảnh
-                            image_desc = describe_image_with_gemini(
-                                client, 
-                                img_bytes, 
-                                "png", 
-                                page_num, 
-                                f"Ảnh trích xuất #{img_idx + 1}"
-                            )
-                            if image_desc:
-                                page_text += f"\n\n[MÔ TẢ HÌNH ẢNH TRÊN TRANG {page_num}]:\n{image_desc.strip()}\n\n"
+                            # Gọi Gemini mô tả hình ảnh nếu có API Client
+                            if client:
+                                image_desc = describe_image_with_gemini(
+                                    client, 
+                                    img_bytes, 
+                                    "png", 
+                                    page_num, 
+                                    f"Ảnh trích xuất #{img_idx + 1}",
+                                    parser_model=parser_model
+                                )
+                                if image_desc:
+                                    page_text += f"\n\n[MÔ TẢ HÌNH ẢNH TRÊN TRANG {page_num}]:\n{image_desc.strip()}\n\n"
                     except Exception as img_err:
                         logger.error(f"[Trang {page_num}] Lỗi khi xử lý ảnh trích xuất #{img_idx + 1}: {img_err}")
 

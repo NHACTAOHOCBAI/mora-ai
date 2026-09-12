@@ -1,8 +1,9 @@
+from typing import Optional
 import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    gemini_api_key: str
+    gemini_api_key: Optional[str] = None
     gemini_model_name: str = "gemini-3.1-flash-lite"
     gemini_parser_model_list: str = "gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-2.5-flash-lite"
     gemini_evaluator_model_name: str = "gemini-3.1-flash-lite"

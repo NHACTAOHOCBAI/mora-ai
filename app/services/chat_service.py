@@ -30,11 +30,16 @@ class EvaluationSchema(BaseModel):
     score: float  # 0.0 to 1.0
 
 class MultiAgentOrchestrator:
-    def __init__(self):
-        self.client = genai.Client(api_key=settings.gemini_api_key)
+    def __init__(self, api_key: str, chat_model: str = None, router_model: str = None, evaluator_model: str = None):
+        if not api_key:
+            raise ValueError("Gemini API Key is required.")
+        self.client = genai.Client(api_key=api_key)
+        self.chat_model = chat_model or settings.gemini_model_name
+        self.router_model = router_model or settings.gemini_model_name
+        self.evaluator_model = evaluator_model or settings.gemini_evaluator_model_name
 
     def route_agent(self, question: str, chat_summary: str, history: List[dict]) -> str:
-        logger.info(f"[Router Agent] Classifying intent for: '{question}'")
+        logger.info(f"[Router Agent] Classifying intent using model '{self.router_model}' for: '{question}'")
         history_str = "\n".join([f"{h.get('sender')}: {h.get('text')}" for h in history[-4:]])
         system_instruction = (
             "Bạn là trợ lý định tuyến (routing agent) cho hệ thống Multi-Agent.\n"
@@ -51,7 +56,7 @@ class MultiAgentOrchestrator:
         )
         try:
             response = self.client.models.generate_content(
-                model=settings.gemini_model_name,
+                model=self.router_model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -65,7 +70,7 @@ class MultiAgentOrchestrator:
             logger.info(f"[Router Agent] Decision: {intent} (Reason: {result.get('reason')})")
             return intent
         except Exception as e:
-            logger.error(f"[Router Agent] Error during routing: {e}", exc_info=True)
+            logger.error(f"[Router Agent] Error during routing with model {self.router_model}: {e}", exc_info=True)
             return "GENERAL"
 
     def retrieval_agent(self, question: str, raw_context: List[dict]) -> List[dict]:
@@ -73,7 +78,7 @@ class MultiAgentOrchestrator:
         return raw_context
 
     def general_chat_agent(self, question: str, chat_summary: str, history: List[dict]) -> Tuple[str, str]:
-        logger.info(f"[General Chat Agent] Answering general query: '{question}'")
+        logger.info(f"[General Chat Agent] Answering query using model '{self.chat_model}': '{question}'")
         system_instruction = (
             "Bạn là Trợ lý Học tập AI tích hợp trong hệ thống Mora.\n"
             "Nhiệm vụ của bạn là trợ giúp người dùng giải quyết các câu hỏi học thuật chung (như giải thích lý thuyết, viết code, giải toán phổ thông, dịch thuật...).\n\n"
@@ -95,7 +100,7 @@ class MultiAgentOrchestrator:
         )
         try:
             response = self.client.models.generate_content(
-                model=settings.gemini_model_name,
+                model=self.chat_model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -105,10 +110,10 @@ class MultiAgentOrchestrator:
             return response.text, system_instruction + "\n\n" + prompt
         except Exception as e:
             logger.error(f"[General Chat Agent] Error: {e}", exc_info=True)
-            return "Đã xảy ra lỗi khi tạo phản hồi. Vui lòng thử lại sau.", prompt
+            return "Đã xảy ra lỗi khi tạo phản hồi. Vui lòng kiểm tra lại API Key hoặc hạn mức Model.", prompt
 
     def synthesis_agent(self, question: str, context: List[dict], chat_summary: str, history: List[dict]) -> dict:
-        logger.info(f"[Synthesis Agent] Synthesizing answer with {len(context)} context chunks.")
+        logger.info(f"[Synthesis Agent] Synthesizing answer using model '{self.chat_model}' with {len(context)} chunks.")
         context_str = ""
         for item in context:
             doc_name = item.get("documentName", f"Tài liệu #{item.get('documentId')}")
@@ -141,7 +146,7 @@ class MultiAgentOrchestrator:
         )
         try:
             response = self.client.models.generate_content(
-                model=settings.gemini_model_name,
+                model=self.chat_model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -154,16 +159,16 @@ class MultiAgentOrchestrator:
             result["promptSent"] = system_instruction + "\n\n" + prompt
             return result
         except Exception as e:
-            logger.error(f"[Synthesis Agent] Error: {e}", exc_info=True)
+            logger.error(f"[Synthesis Agent] Error with model {self.chat_model}: {e}", exc_info=True)
             return {
-                "answer": "Không thể tổng hợp câu trả lời dựa trên tài liệu. Vui lòng thử lại sau.",
+                "answer": "Không thể tổng hợp câu trả lời dựa trên tài liệu. Vui lòng kiểm tra lại API Key hoặc hạn mức Model.",
                 "citations": [],
                 "condensedQuestion": question,
                 "promptSent": prompt
             }
 
     def evaluator_agent(self, answer: str, context: List[dict]) -> Tuple[bool, float]:
-        logger.info("[Evaluator Agent] Performing Quality Control Check on generated answer.")
+        logger.info(f"[Evaluator Agent] Performing QC using model '{self.evaluator_model}'.")
         if not context:
             return True, 1.0
         context_str = "\n---\n".join([c.get("text", "") for c in context])
@@ -182,7 +187,7 @@ class MultiAgentOrchestrator:
         )
         try:
             response = self.client.models.generate_content(
-                model=settings.gemini_evaluator_model_name,
+                model=self.evaluator_model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
@@ -197,14 +202,23 @@ class MultiAgentOrchestrator:
             logger.info(f"[Evaluator Agent] Quality score: {score} (Is Faithful: {is_faithful})")
             return is_faithful, score
         except Exception as e:
-            logger.error(f"[Evaluator Agent] Evaluation error: {e}", exc_info=True)
+            logger.error(f"[Evaluator Agent] Evaluation error with model {self.evaluator_model}: {e}", exc_info=True)
             return True, 1.0
 
 
 def generate_chat_response(request: ChatRequest) -> ChatResponse:
-    logger.info(f"Bắt đầu xử lý câu hỏi (Multi-Agent đồng bộ): {request.question}")
+    if not request.api_key:
+        logger.error("Yêu cầu chat bị từ chối do thiếu Gemini API Key.")
+        raise ValueError("Vui lòng cấu hình Gemini API Key trước khi sử dụng.")
+
+    logger.info(f"Bắt đầu xử lý câu hỏi: {request.question}")
     
-    orchestrator = MultiAgentOrchestrator()
+    orchestrator = MultiAgentOrchestrator(
+        api_key=request.api_key,
+        chat_model=request.chat_model,
+        router_model=request.router_model,
+        evaluator_model=request.evaluator_model
+    )
     
     # Chuẩn bị dữ liệu cho các Agent
     raw_context = [
@@ -294,8 +308,13 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
     )
 
 def generate_chat_summary(request: ChatSummarizeRequest) -> ChatSummarizeResponse:
+    if not request.api_key:
+        logger.warning("Bỏ qua tóm tắt hội thoại do thiếu API Key.")
+        return ChatSummarizeResponse(summary=request.previous_summary if request.previous_summary else "")
+
     logger.info("Bắt đầu tóm tắt lịch sử hội thoại...")
-    client = genai.Client(api_key=settings.gemini_api_key)
+    client = genai.Client(api_key=request.api_key)
+    model_name = request.summarizer_model or settings.gemini_model_name
 
     # Định dạng lịch sử hội thoại thành chuỗi văn bản
     history_str = ""
@@ -328,7 +347,7 @@ def generate_chat_summary(request: ChatSummarizeRequest) -> ChatSummarizeRespons
 
     try:
         response = client.models.generate_content(
-            model=settings.gemini_model_name,
+            model=model_name,
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
@@ -340,5 +359,24 @@ def generate_chat_summary(request: ChatSummarizeRequest) -> ChatSummarizeRespons
         return ChatSummarizeResponse(summary=summary)
     except Exception as e:
         logger.error(f"Lỗi khi tóm tắt hội thoại bằng Gemini: {e}", exc_info=True)
-        # Fallback trả về tóm tắt cũ hoặc tóm tắt mặc định
         return ChatSummarizeResponse(summary=request.previous_summary if request.previous_summary else "Hội thoại học tập về tài liệu.")
+
+def validate_gemini_key(api_key: str, model_name: str = "gemini-2.5-flash") -> Tuple[bool, str]:
+    if not api_key or not api_key.strip():
+        return False, "API Key không được để trống."
+    try:
+        client = genai.Client(api_key=api_key.strip())
+        response = client.models.generate_content(
+            model=model_name or "gemini-2.5-flash",
+            contents="ping",
+            config=types.GenerateContentConfig(
+                max_output_tokens=5,
+                temperature=0.0
+            )
+        )
+        return True, "API Key hợp lệ và kết nối Google AI Studio thành công."
+    except Exception as e:
+        error_msg = str(e)
+        logger.warning(f"Key validation failed: {error_msg}")
+        return False, f"API Key không hợp lệ hoặc đã hết hạn mức: {error_msg}"
+
