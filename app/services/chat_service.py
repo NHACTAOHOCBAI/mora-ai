@@ -254,15 +254,37 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
         citations = []
         condensed_question = request.question
         
-    # Map citations sang DTO Citation
-    citations_mapped = []
+    # Map và deduplicate citations sang DTO Citation (gom các quote cùng trang)
+    unique_citations = {}
     for c in citations:
-        citations_mapped.append(Citation(
-            pageNumber=c.get("pageNumber"),
-            quote=c.get("quote", ""),
-            documentId=c.get("documentId"),
-            documentName=c.get("documentName")
-        ))
+        page_num = c.get("pageNumber")
+        if page_num is None:
+            continue
+        doc_id = c.get("documentId")
+        doc_name = c.get("documentName")
+        quote = (c.get("quote") or "").strip()
+        key = (doc_id, doc_name, page_num)
+        
+        if key not in unique_citations:
+            unique_citations[key] = {
+                "pageNumber": page_num,
+                "documentId": doc_id,
+                "documentName": doc_name,
+                "quotes": [quote] if quote else []
+            }
+        else:
+            if quote and quote not in unique_citations[key]["quotes"]:
+                unique_citations[key]["quotes"].append(quote)
+
+    citations_mapped = [
+        Citation(
+            pageNumber=item["pageNumber"],
+            quote="\n---\n".join(item["quotes"]),
+            documentId=item["documentId"],
+            documentName=item["documentName"]
+        )
+        for item in unique_citations.values()
+    ]
         
     return ChatResponse(
         answer=answer,
