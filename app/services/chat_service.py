@@ -1,5 +1,5 @@
 import json
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from pydantic import BaseModel
 from loguru import logger
 from google import genai
@@ -73,9 +73,34 @@ class MultiAgentOrchestrator:
             logger.error(f"[Router Agent] Error during routing with model {self.router_model}: {e}", exc_info=True)
             return "GENERAL"
 
-    def retrieval_agent(self, question: str, raw_context: List[dict]) -> List[dict]:
-        logger.info(f"[Retrieval Agent] Filtering context chunks. Total input: {len(raw_context)}")
-        return raw_context
+    def retrieval_agent(self, question: str, space_id: Optional[int] = None, raw_context: List[dict] = None) -> List[dict]:
+        logger.info(f"[Retrieval Agent] Bắt đầu xử lý truy vấn cho Space ID: {space_id}")
+        if space_id:
+            try:
+                from app.services.retrieval_service import hybrid_retrieve
+                retrieved_chunks = hybrid_retrieve(
+                    query=question,
+                    space_id=space_id,
+                    gemini_client=self.client
+                )
+                if retrieved_chunks:
+                    mapped_context = []
+                    for c in retrieved_chunks:
+                        content_text = c.get("enrichedContent") or c.get("content") or ""
+                        mapped_context.append({
+                            "pageNumber": c.get("pageNumber", 1),
+                            "text": content_text,
+                            "documentName": c.get("documentName", ""),
+                            "documentId": c.get("documentId"),
+                            "sectionPath": c.get("sectionPath", "")
+                        })
+                    logger.info(f"[Retrieval Agent] Hybrid Search thành công! Chọn {len(mapped_context)} chunks tinh hoa cung cấp cho Synthesis Agent.")
+                    return mapped_context
+            except Exception as e:
+                logger.error(f"[Retrieval Agent] Lỗi trong quá trình Hybrid Search: {e}", exc_info=True)
+
+        logger.info(f"[Retrieval Agent] Sử dụng raw_context đầu vào. Tổng số: {len(raw_context) if raw_context else 0}")
+        return raw_context or []
 
     def general_chat_agent(self, question: str, chat_summary: str, history: List[dict]) -> Tuple[str, str]:
         logger.info(f"[General Chat Agent] Answering query using model '{self.chat_model}': '{question}'")
@@ -221,13 +246,15 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
     )
     
     # Chuẩn bị dữ liệu cho các Agent
+    space_id = request.space_id or request.spaceId
     raw_context = [
         {
             "pageNumber": ctx.pageNumber,
             "text": ctx.text,
             "documentName": ctx.documentName,
-            "documentId": ctx.documentId
-        } for ctx in request.context
+            "documentId": ctx.documentId,
+            "sectionPath": ctx.sectionPath
+        } for ctx in (request.context or [])
     ]
     history = [
         {
@@ -245,24 +272,35 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
     prompt_sent = ""
     
     # 2. Xử lý theo phân loại
-    if intent == "RAG" and raw_context:
-        filtered_context = orchestrator.retrieval_agent(request.question, raw_context)
-        max_retries = 2
-        for attempt in range(max_retries):
-            logger.info(f"[Orchestrator] Synthesis attempt {attempt + 1}")
-            rag_result = orchestrator.synthesis_agent(request.question, filtered_context, request.chat_summary or "", history)
-            answer = rag_result.get("answer", "")
-            citations = rag_result.get("citations", [])
-            condensed_question = rag_result.get("condensedQuestion", request.question)
-            prompt_sent = rag_result.get("promptSent", "")
-            
-            # Evaluator Agent kiểm QC câu trả lời
-            is_faithful, score = orchestrator.evaluator_agent(answer, filtered_context)
-            if is_faithful or score >= 0.7:
-                logger.info("[Orchestrator] QC passed successfully!")
-                break
-            else:
-                logger.warning(f"[Orchestrator] QC failed with score {score}. Retrying synthesis...")
+    if intent == "RAG":
+        filtered_context = orchestrator.retrieval_agent(
+            question=request.question, 
+            space_id=space_id, 
+            raw_context=raw_context
+        )
+        if not filtered_context:
+            logger.warn(f"[Orchestrator] Không tìm thấy ngữ cảnh nào cho câu hỏi RAG: '{request.question}'")
+            answer = "Không tìm thấy thông tin phù hợp trong tài liệu của Không gian học tập này để trả lời câu hỏi của bạn."
+            citations = []
+            condensed_question = request.question
+            prompt_sent = ""
+        else:
+            max_retries = 2
+            for attempt in range(max_retries):
+                logger.info(f"[Orchestrator] Synthesis attempt {attempt + 1}")
+                rag_result = orchestrator.synthesis_agent(request.question, filtered_context, request.chat_summary or "", history)
+                answer = rag_result.get("answer", "")
+                citations = rag_result.get("citations", [])
+                condensed_question = rag_result.get("condensedQuestion", request.question)
+                prompt_sent = rag_result.get("promptSent", "")
+                
+                # Evaluator Agent kiểm QC câu trả lời
+                is_faithful, score = orchestrator.evaluator_agent(answer, filtered_context)
+                if is_faithful or score >= 0.7:
+                    logger.info("[Orchestrator] QC passed successfully!")
+                    break
+                else:
+                    logger.warning(f"[Orchestrator] QC failed with score {score}. Retrying synthesis...")
     else:
         answer, prompt_sent = orchestrator.general_chat_agent(request.question, request.chat_summary or "", history)
         citations = []
@@ -330,7 +368,8 @@ def generate_chat_summary(request: ChatSummarizeRequest) -> ChatSummarizeRespons
 
     prompt = ""
     if request.previous_summary:
-        new_messages = request.history[-2:] if len(request.history) >= 2 else request.history
+        # Lấy tối đa 12 tin nhắn gần nhất (tương đương 6 lượt Q&A trong chu kỳ batching)
+        new_messages = request.history[-12:] if len(request.history) >= 12 else request.history
         new_history_str = ""
         for h in new_messages:
             role = "Người dùng" if h.sender == "user" else "Trợ lý AI"
@@ -338,8 +377,8 @@ def generate_chat_summary(request: ChatSummarizeRequest) -> ChatSummarizeRespons
 
         prompt += (
             f"Bản tóm tắt lịch sử hội thoại trước đó:\n{request.previous_summary}\n\n"
-            f"Các câu thoại mới nhất diễn ra:\n{new_history_str}\n\n"
-            f"Nhiệm vụ của bạn là tích hợp các câu thoại mới nhất vào bản tóm tắt cũ và viết lại một bản tóm tắt mới hoàn chỉnh, ngắn gọn."
+            f"Các câu thoại mới nhất diễn ra trong chu kỳ vừa qua:\n{new_history_str}\n\n"
+            f"Nhiệm vụ của bạn là tích hợp các nội dung mới vào bản tóm tắt cũ và viết lại một bản tóm tắt mới hoàn chỉnh, ngắn gọn (không quá 150 từ)."
         )
     else:
         prompt += "Toàn bộ lịch sử hội thoại:\n"

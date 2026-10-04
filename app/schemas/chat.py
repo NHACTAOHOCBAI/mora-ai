@@ -6,6 +6,7 @@ class ChatContextItem(BaseModel):
     text: str
     documentName: Optional[str] = None
     documentId: Optional[int] = None
+    sectionPath: Optional[str] = None
 
 class ChatHistoryItem(BaseModel):
     sender: str  # "user" or "assistant"
@@ -13,13 +14,17 @@ class ChatHistoryItem(BaseModel):
 
 class ChatRequest(BaseModel):
     question: str
-    context: List[ChatContextItem]
+    context: Optional[List[ChatContextItem]] = []
     history: List[ChatHistoryItem]
     chat_summary: Optional[str] = None
     api_key: Optional[str] = None
     chat_model: Optional[str] = None
     router_model: Optional[str] = None
     evaluator_model: Optional[str] = None
+    space_id: Optional[int] = None
+    spaceId: Optional[int] = None
+    document_id: Optional[int] = None
+    documentId: Optional[int] = None
 
 class Citation(BaseModel):
     pageNumber: int

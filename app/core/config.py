@@ -15,6 +15,17 @@ class Settings(BaseSettings):
     rabbitmq_user: str = "guest"
     rabbitmq_password: str = "guest"
 
+    # Qdrant Vector Database
+    qdrant_host: str = "localhost"
+    qdrant_port: int = 6333
+    qdrant_grpc_port: int = 6334
+
+    # Retrieval & Embedding
+    gemini_embedding_model: str = "models/gemini-embedding-2"
+    retrieval_top_k: int = 5
+    retrieval_dense_limit: int = 20
+    retrieval_sparse_limit: int = 20
+
     # Cấu hình đọc từ file .env của backend hoặc file .env cục bộ của python
     model_config = SettingsConfigDict(
         env_file=(
