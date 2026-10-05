@@ -13,7 +13,6 @@ langchain-google-genai
 langchain-community
 langchain-google-vertexai
 docling
-pika
 qdrant-client
 rank-bm25
 flashrank

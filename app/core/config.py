@@ -10,11 +10,6 @@ class Settings(BaseSettings):
     gemini_evaluator_embeddings_model_name: str = "models/gemini-embedding-2"
     gemini_temperature: float = 0.0
 
-    rabbitmq_host: str = "localhost"
-    rabbitmq_port: int = 5672
-    rabbitmq_user: str = "guest"
-    rabbitmq_password: str = "guest"
-
     # Qdrant Vector Database
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
