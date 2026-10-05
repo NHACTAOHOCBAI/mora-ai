@@ -11,9 +11,11 @@ class Settings(BaseSettings):
     gemini_temperature: float = 0.0
 
     # Qdrant Vector Database
+    qdrant_url: Optional[str] = None
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
     qdrant_grpc_port: int = 6334
+    qdrant_api_key: Optional[str] = None
 
     # Retrieval & Embedding
     gemini_embedding_model: str = "models/gemini-embedding-2"

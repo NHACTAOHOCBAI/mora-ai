@@ -1,3 +1,13 @@
+---
+title: Mora AI Service
+emoji: 🧠
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+app_port: 8000
+pinned: false
+---
+
 # Mora AI Service
 
 Mora AI Service là một Python-based microservice được xây dựng bằng **FastAPI** và thư viện **Google GenAI SDK** chính thức từ Google. Dịch vụ này chịu trách nhiệm xử lý toàn bộ các tác vụ liên quan đến trí tuệ nhân tạo (AI) và tích hợp mô hình **Gemini** (ví dụ: `gemini-3.1-flash-lite`) cho dự án Mạng xã hội học tập Mora.

@@ -33,8 +33,15 @@ class VectorStoreManager:
         self.vector_size = 3072  # Kích thước embedding chuẩn của models/gemini-embedding-2
         
         try:
-            logger.info(f"Kết nối tới Qdrant Vector Database tại {settings.qdrant_host}:{settings.qdrant_port}...")
-            self.client = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
+            if settings.qdrant_url:
+                logger.info(f"Kết nối tới Qdrant Cloud qua URL: {settings.qdrant_url}...")
+                self.client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
+            elif settings.qdrant_host.startswith("http://") or settings.qdrant_host.startswith("https://"):
+                logger.info(f"Kết nối tới Qdrant qua URL: {settings.qdrant_host}...")
+                self.client = QdrantClient(url=settings.qdrant_host, api_key=settings.qdrant_api_key)
+            else:
+                logger.info(f"Kết nối tới Qdrant Vector Database tại {settings.qdrant_host}:{settings.qdrant_port}...")
+                self.client = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port, api_key=settings.qdrant_api_key)
             self._ensure_collection()
             logger.info("Kết nối Qdrant Vector DB thành công!")
         except Exception as e:
