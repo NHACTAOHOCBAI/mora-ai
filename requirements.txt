@@ -12,7 +12,7 @@ langchain
 langchain-google-genai
 langchain-community
 langchain-google-vertexai
-docling
+pypdf
 qdrant-client
 rank-bm25
 flashrank

@@ -1,35 +1,35 @@
 import io
-import os
-os.environ["HF_HUB_DISABLE_SYMLINKS"] = "1"
-
-from collections import defaultdict
+import time
+from typing import List, Dict, Any, Optional
 from loguru import logger
+import pypdf
 from google import genai
 from google.genai import types
 from app.core.config import settings
 
-def describe_image_with_gemini(client: genai.Client, image_bytes: bytes, ext: str, page_num: int, source_type: str, parser_model: str = None) -> str:
-    # Map extension to mime type
-    mime_type = "image/png"
-    if ext.lower() in ["jpg", "jpeg"]:
-        mime_type = "image/jpeg"
-    elif ext.lower() == "webp":
-        mime_type = "image/webp"
-
-    image_part = types.Part.from_bytes(
-        data=image_bytes,
-        mime_type=mime_type
+def extract_page_with_gemini_vision(
+    client: genai.Client,
+    page_pdf_bytes: bytes,
+    page_num: int,
+    raw_fallback_text: str = "",
+    parser_model: Optional[str] = None
+) -> str:
+    """Sử dụng Gemini Native Multimodal PDF để đọc và chuyển đổi một trang tài liệu sang Markdown chuẩn (kèm bảng và sơ đồ)."""
+    page_part = types.Part.from_bytes(
+        data=page_pdf_bytes,
+        mime_type="application/pdf"
     )
 
     prompt = (
-        "Đây là hình ảnh hoặc sơ đồ được trích xuất từ một trang tài liệu PDF. "
-        "Hãy phân tích và mô tả chi tiết sơ đồ, biểu đồ hoặc hình vẽ này dưới dạng văn bản tiếng Việt để làm tài liệu tra cứu. "
-        "Nếu là sơ đồ/lưu đồ, hãy nêu rõ các thành phần, các bước và luồng xử lý. "
-        "Nếu là biểu đồ, hãy nêu rõ các thông số và số liệu thống kê cốt lõi. "
-        "Nếu là hình vẽ minh họa, hãy mô tả chi tiết đối tượng vẽ và ý nghĩa của nó."
+        "Bạn là chuyên gia AI trích xuất và số hóa tài liệu học thuật cho mạng xã hội học tập Mora. "
+        "Hãy trích xuất và chuyển đổi toàn bộ nội dung của trang tài liệu PDF này sang định dạng Markdown chuẩn với các yêu cầu sau:\n"
+        "1. Giữ nguyên cấu trúc phân cấp tiêu đề (#, ##, ###), danh sách và các đoạn văn bản.\n"
+        "2. Nếu có bảng biểu (Tables), bắt buộc định dạng chuẩn cú pháp Markdown Table (| Cột 1 | Cột 2 |...) với đầy đủ dữ liệu.\n"
+        "3. Nếu có hình ảnh, sơ đồ lưu đồ (Flowchart), biểu đồ (Chart), hãy chèn mục `[MÔ TẢ SƠ ĐỒ / HÌNH ẢNH]:` và phân tích chi tiết các thành phần, luồng xử lý và số liệu thống kê.\n"
+        "4. Nếu có công thức toán học hoặc ký hiệu khoa học, hãy giữ nguyên định dạng LaTeX hoặc ký tự chuẩn.\n"
+        "5. Chỉ trả về nội dung Markdown trích xuất trực tiếp, tuyệt đối không thêm lời chào mở đầu hay kết thúc."
     )
 
-    # Parse fallback model list
     if parser_model:
         model_list = [parser_model.strip()]
     else:
@@ -39,115 +39,92 @@ def describe_image_with_gemini(client: genai.Client, image_bytes: bytes, ext: st
 
     last_error = None
     for idx, model_name in enumerate(model_list):
-        try:
-            logger.info(f"[Trang {page_num}] Đang gửi ảnh chụp {source_type} ({len(image_bytes)} bytes) sang Gemini Vision sử dụng model {model_name}...")
-            response = client.models.generate_content(
-                model=model_name,
-                contents=[image_part, prompt]
-            )
-            caption = response.text
-            logger.info(f"[Trang {page_num}] Nhận phản hồi mô tả sơ đồ từ Gemini Vision thành công qua model {model_name} (dài {len(caption)} ký tự).")
-            return caption
-        except Exception as e:
-            last_error = e
-            logger.warn(f"[Trang {page_num}] Lỗi khi gọi Gemini Vision với model {model_name}: {e}. "
-                        f"{'Đang thử model tiếp theo...' if idx < len(model_list) - 1 else 'Tất cả các model dự phòng đều thất bại.'}")
+        for attempt in range(3):
+            try:
+                logger.info(f"[Trang {page_num}] Đang phân tích layout & sơ đồ qua Gemini Multimodal ({model_name})...")
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[page_part, prompt]
+                )
+                if response and response.text:
+                    parsed_markdown = response.text.strip()
+                    logger.info(f"[Trang {page_num}] Gemini trích xuất Markdown thành công ({len(parsed_markdown)} ký tự).")
+                    return parsed_markdown
+                break
+            except Exception as e:
+                last_error = e
+                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                    logger.warning(f"[Trang {page_num}] Gặp Rate Limit (429) với {model_name}. Đang chờ 3s (thử lại lần {attempt+1})...")
+                    time.sleep(3)
+                else:
+                    logger.warning(f"[Trang {page_num}] Lỗi với model {model_name}: {e}. Đang thử model tiếp theo...")
+                    break
 
-    logger.error(f"[Trang {page_num}] Không thể mô tả {source_type} sau khi thử tất cả các model. Lỗi cuối cùng: {last_error}")
-    return ""
+    logger.error(f"[Trang {page_num}] Không thể phân tích qua Gemini Vision (Lỗi: {last_error}). Sử dụng text fallback trích xuất từ pypdf.")
+    return raw_fallback_text
 
-def parse_pdf_layout_and_diagrams(pdf_bytes: bytes, api_key: str = None, parser_model: str = None) -> list:
-    logger.info("========================================= MORA DOCLING PARSING START =========================================")
-    logger.info(f"Bắt đầu phân tích cấu trúc PDF bằng IBM Docling. Kích thước file: {len(pdf_bytes)} bytes")
-    
+
+def parse_pdf_layout_and_diagrams(pdf_bytes: bytes, api_key: Optional[str] = None, parser_model: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Trích xuất cấu trúc văn bản, bảng biểu và sơ đồ từ file PDF bằng pypdf kết hợp Gemini Native Multimodal."""
+    logger.info("========================================= MORA LIGHTWEIGHT PARSING START =========================================")
+    logger.info(f"Bắt đầu phân tích PDF siêu nhẹ (pypdf + Gemini Multimodal). Kích thước file: {len(pdf_bytes)} bytes")
+
+    effective_api_key = api_key or settings.gemini_api_key
     client = None
-    if api_key:
-        client = genai.Client(api_key=api_key)
-    parsed_pages = []
+    if effective_api_key:
+        client = genai.Client(api_key=effective_api_key)
 
     try:
-        # Lazy import Docling to optimize startup memory
-        from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.pipeline_options import PdfPipelineOptions
-        from docling.document_converter import DocumentConverter, PdfFormatOption, DocumentStream
-        from docling_core.types.doc import PictureItem
-
-        # Cấu hình Docling Pipeline
-        pipeline_options = PdfPipelineOptions()
-        pipeline_options.generate_page_images = False
-        pipeline_options.generate_picture_images = True  # Trích xuất hình ảnh
-        pipeline_options.images_scale = 2.0  # Tăng độ phân giải cho ảnh trích xuất
-
-        doc_converter = DocumentConverter(
-            format_options={
-                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
-            }
-        )
-
-        # Đọc PDF từ memory stream
-        pdf_stream = io.BytesIO(pdf_bytes)
-        doc_stream = DocumentStream(name="document.pdf", stream=pdf_stream)
-        
-        logger.info("Đang chuyển đổi tài liệu bằng Docling...")
-        conv_res = doc_converter.convert(doc_stream)
-        doc = conv_res.document
-        total_pages = len(doc.pages)
-        logger.info(f"Phân tích tài liệu thành công. Tổng số trang: {total_pages}")
-
-        # Gom nhóm các bức ảnh (PictureItem) theo trang (page_no)
-        pictures_by_page = defaultdict(list)
-        for element, _level in doc.iterate_items():
-            if isinstance(element, PictureItem):
-                if element.prov and len(element.prov) > 0:
-                    page_no = element.prov[0].page_no
-                    pictures_by_page[page_no].append(element)
-
-        # Xử lý nội dung từng trang
-        for page_num in range(1, total_pages + 1):
-            logger.info(f"[Trang {page_num}/{total_pages}] Đang trích xuất văn bản & bảng biểu Markdown...")
-            
-            # Trích xuất Markdown thô của trang (bao gồm cả Tables đã chuyển sang Markdown tự động bởi Docling)
-            page_text = doc.export_to_markdown(page_no=page_num, image_mode="placeholder")
-            page_text = page_text.strip()
-
-            # Lấy và mô tả tất cả ảnh thuộc trang này
-            page_pictures = pictures_by_page[page_num]
-            if page_pictures:
-                logger.info(f"[Trang {page_num}] Phát hiện {len(page_pictures)} ảnh/sơ đồ trích xuất từ Docling.")
-                for img_idx, element in enumerate(page_pictures):
-                    try:
-                        # Lấy PIL Image của ảnh từ tài liệu
-                        pil_img = element.get_image(doc)
-                        if pil_img:
-                            # Convert PIL Image to bytes
-                            img_byte_arr = io.BytesIO()
-                            pil_img.save(img_byte_arr, format='PNG')
-                            img_bytes = img_byte_arr.getvalue()
-
-                            # Gọi Gemini mô tả hình ảnh nếu có API Client
-                            if client:
-                                image_desc = describe_image_with_gemini(
-                                    client, 
-                                    img_bytes, 
-                                    "png", 
-                                    page_num, 
-                                    f"Ảnh trích xuất #{img_idx + 1}",
-                                    parser_model=parser_model
-                                )
-                                if image_desc:
-                                    page_text += f"\n\n[MÔ TẢ HÌNH ẢNH TRÊN TRANG {page_num}]:\n{image_desc.strip()}\n\n"
-                    except Exception as img_err:
-                        logger.error(f"[Trang {page_num}] Lỗi khi xử lý ảnh trích xuất #{img_idx + 1}: {img_err}")
-
-            parsed_pages.append({
-                "pageNumber": page_num,
-                "text": page_text
-            })
-            logger.info(f"[Trang {page_num}] Hoàn thành xử lý trang.")
-
+        reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+        total_pages = len(reader.pages)
+        logger.info(f"Đọc thành công file PDF với tổng số trang: {total_pages}")
     except Exception as e:
-        logger.error(f"Lỗi nghiêm trọng trong quá trình Docling parsing: {e}")
-        raise e
+        logger.error(f"Lỗi khi đọc file PDF bằng pypdf: {e}", exc_info=True)
+        raise RuntimeError(f"Không thể đọc định dạng PDF: {str(e)}")
 
-    logger.info("========================================= MORA DOCLING PARSING END =========================================")
+    parsed_pages = []
+
+    for page_idx in range(total_pages):
+        page_num = page_idx + 1
+        page = reader.pages[page_idx]
+
+        # 1. Trích xuất text thô bằng pypdf
+        try:
+            raw_text = page.extract_text() or ""
+            raw_text = raw_text.strip()
+        except Exception as ex:
+            logger.warning(f"[Trang {page_num}] Không thể trích xuất text thuần: {ex}")
+            raw_text = ""
+
+        # 2. Nếu có Gemini API Client, gửi từng trang PDF slice sang Gemini Multimodal để tái tạo Markdown chuẩn
+        if client:
+            try:
+                # Tách riêng trang này thành 1 file PDF mini trong bộ nhớ
+                writer = pypdf.PdfWriter()
+                writer.add_page(page)
+                page_stream = io.BytesIO()
+                writer.write(page_stream)
+                page_pdf_bytes = page_stream.getvalue()
+
+                # Gửi sang Gemini Vision
+                page_markdown = extract_page_with_gemini_vision(
+                    client=client,
+                    page_pdf_bytes=page_pdf_bytes,
+                    page_num=page_num,
+                    raw_fallback_text=raw_text,
+                    parser_model=parser_model
+                )
+            except Exception as e:
+                logger.error(f"[Trang {page_num}] Lỗi trong quá trình tạo page slice: {e}. Dùng raw text fallback.")
+                page_markdown = raw_text
+        else:
+            page_markdown = raw_text
+
+        parsed_pages.append({
+            "pageNumber": page_num,
+            "text": page_markdown
+        })
+        logger.info(f"[Trang {page_num}/{total_pages}] Hoàn tất xử lý trang.")
+
+    logger.info("========================================= MORA LIGHTWEIGHT PARSING END =========================================")
     return parsed_pages
