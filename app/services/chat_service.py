@@ -74,15 +74,22 @@ class MultiAgentOrchestrator:
             logger.error(f"[Router Agent] Error during routing with model {self.router_model}: {e}", exc_info=True)
             return "GENERAL"
 
-    def retrieval_agent(self, question: str, space_id: Optional[int] = None, raw_context: List[dict] = None) -> List[dict]:
-        logger.info(f"[Retrieval Agent] Bắt đầu xử lý truy vấn cho Space ID: {space_id}")
+    def retrieval_agent(
+        self, 
+        question: str, 
+        space_id: Optional[int] = None, 
+        raw_context: List[dict] = None,
+        document_ids: Optional[List[int]] = None
+    ) -> List[dict]:
+        logger.info(f"[Retrieval Agent] Bắt đầu xử lý truy vấn cho Space ID: {space_id}, Document IDs: {document_ids}")
         if space_id:
             try:
                 from app.services.retrieval_service import hybrid_retrieve
                 retrieved_chunks = hybrid_retrieve(
                     query=question,
                     space_id=space_id,
-                    gemini_client=self.client
+                    gemini_client=self.client,
+                    document_ids=document_ids
                 )
                 if retrieved_chunks:
                     mapped_context = []
@@ -249,6 +256,7 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
     
     # Chuẩn bị dữ liệu cho các Agent
     space_id = request.space_id or request.spaceId
+    document_ids = request.document_ids or request.documentIds
     raw_context = [
         {
             "pageNumber": ctx.pageNumber,
@@ -285,7 +293,8 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
         filtered_context = orchestrator.retrieval_agent(
             question=request.question, 
             space_id=space_id, 
-            raw_context=raw_context
+            raw_context=raw_context,
+            document_ids=document_ids
         )
         t_retrieval = time.time() - t_retrieval_start
         

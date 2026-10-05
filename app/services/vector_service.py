@@ -9,6 +9,7 @@ from qdrant_client.models import (
     Filter, 
     FieldCondition, 
     MatchValue,
+    MatchAny,
     PayloadSchemaType
 )
 from rank_bm25 import BM25Okapi
@@ -150,8 +151,14 @@ class VectorStoreManager:
             self.bm25_store[space_id]["bm25"] = BM25Okapi(tokenized_corpus)
             logger.info(f"[BM25] Đã cập nhật chỉ mục BM25 cho Space {space_id} với tổng số {len(filtered_chunks)} chunks.")
 
-    def search_dense(self, space_id: int, query_vector: List[float], limit: int = 20) -> List[Dict[str, Any]]:
-        """Tìm kiếm tương đồng Vector trong Qdrant lọc theo space_id."""
+    def search_dense(
+        self, 
+        space_id: int, 
+        query_vector: List[float], 
+        limit: int = 20,
+        document_ids: Optional[List[int]] = None
+    ) -> List[Dict[str, Any]]:
+        """Tìm kiếm tương đồng Vector trong Qdrant lọc theo space_id và danh sách document_ids tùy chọn."""
         if not self.client:
             return []
 
@@ -160,14 +167,22 @@ class VectorStoreManager:
         elif len(query_vector) < self.vector_size:
             query_vector = query_vector + [0.0] * (self.vector_size - len(query_vector))
 
-        query_filter = Filter(
-            must=[
+        must_conditions = [
+            FieldCondition(
+                key="space_id",
+                match=MatchValue(value=space_id)
+            )
+        ]
+
+        if document_ids and len(document_ids) > 0:
+            must_conditions.append(
                 FieldCondition(
-                    key="space_id",
-                    match=MatchValue(value=space_id)
+                    key="document_id",
+                    match=MatchAny(any=document_ids)
                 )
-            ]
-        )
+            )
+
+        query_filter = Filter(must=must_conditions)
 
         search_response = self.client.query_points(
             collection_name=self.collection_name,
@@ -193,8 +208,14 @@ class VectorStoreManager:
             })
         return results
 
-    def search_sparse(self, space_id: int, query: str, limit: int = 20) -> List[Dict[str, Any]]:
-        """Tìm kiếm từ khóa chính xác BM25 lọc theo space_id."""
+    def search_sparse(
+        self, 
+        space_id: int, 
+        query: str, 
+        limit: int = 20,
+        document_ids: Optional[List[int]] = None
+    ) -> List[Dict[str, Any]]:
+        """Tìm kiếm từ khóa chính xác BM25 lọc theo space_id và danh sách document_ids tùy chọn."""
         if space_id not in self.bm25_store or not self.bm25_store[space_id]["bm25"]:
             return []
 
@@ -204,11 +225,16 @@ class VectorStoreManager:
         scores = bm25.get_scores(tokenized_query)
 
         # Lấy top k điểm cao nhất
-        top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:limit]
+        top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+        
+        doc_id_set = set(document_ids) if document_ids and len(document_ids) > 0 else None
+
         results = []
         for idx in top_indices:
             if scores[idx] > 0:
                 c = chunks[idx]
+                if doc_id_set is not None and c.documentId not in doc_id_set:
+                    continue
                 results.append({
                     "chunkId": c.chunkId,
                     "documentId": c.documentId,
@@ -221,6 +247,8 @@ class VectorStoreManager:
                     "score": float(scores[idx]),
                     "source": "sparse"
                 })
+                if len(results) >= limit:
+                    break
         return results
 
 vector_store = VectorStoreManager()

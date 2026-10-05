@@ -25,6 +25,8 @@ class ChatRequest(BaseModel):
     spaceId: Optional[int] = None
     document_id: Optional[int] = None
     documentId: Optional[int] = None
+    document_ids: Optional[List[int]] = None
+    documentIds: Optional[List[int]] = None
 
 class Citation(BaseModel):
     pageNumber: int

@@ -48,17 +48,18 @@ def hybrid_retrieve(
     query: str, 
     space_id: int, 
     gemini_client: genai.Client, 
-    top_k: int = None
+    top_k: int = None,
+    document_ids: Optional[List[int]] = None
 ) -> List[Dict[str, Any]]:
     """
     Quy trình Two-Stage Hybrid Search & Re-ranking:
     1. Tạo Dense Vector cho câu hỏi qua Gemini Embedding Model.
-    2. Tìm kiếm đồng thời Dense (Qdrant) và Sparse (BM25).
+    2. Tìm kiếm đồng thời Dense (Qdrant) và Sparse (BM25), có thể lọc theo document_ids.
     3. Hợp nhất bằng Reciprocal Rank Fusion (RRF).
     4. Re-rank bằng FlashRank để chọn ra Top-K chunks tối ưu nhất.
     """
     target_top_k = top_k or settings.retrieval_top_k
-    logger.info(f"[Retrieval Agent] Bắt đầu Two-Stage Hybrid Search cho Space {space_id} với câu hỏi: '{query}'")
+    logger.info(f"[Retrieval Agent] Bắt đầu Two-Stage Hybrid Search cho Space {space_id} (docs: {document_ids}) với câu hỏi: '{query}'")
 
     # 1. Tạo Query Vector
     try:
@@ -77,13 +78,15 @@ def hybrid_retrieve(
         dense_hits = vector_store.search_dense(
             space_id=space_id, 
             query_vector=query_vector, 
-            limit=settings.retrieval_dense_limit
+            limit=settings.retrieval_dense_limit,
+            document_ids=document_ids
         )
 
     sparse_hits = vector_store.search_sparse(
         space_id=space_id, 
         query=query, 
-        limit=settings.retrieval_sparse_limit
+        limit=settings.retrieval_sparse_limit,
+        document_ids=document_ids
     )
 
     logger.info(f"[Retrieval Agent] Tìm thấy {len(dense_hits)} Dense hits và {len(sparse_hits)} Sparse hits.")
