@@ -1,4 +1,5 @@
 import json
+import time
 from typing import List, Tuple, Optional
 from pydantic import BaseModel
 from loguru import logger
@@ -40,7 +41,7 @@ class MultiAgentOrchestrator:
 
     def route_agent(self, question: str, chat_summary: str, history: List[dict]) -> str:
         logger.info(f"[Router Agent] Classifying intent using model '{self.router_model}' for: '{question}'")
-        history_str = "\n".join([f"{h.get('sender')}: {h.get('text')}" for h in history[-4:]])
+        history_str = "\n".join([f"{h.get('sender')}: {h.get('text')}" for h in history[-12:]])
         system_instruction = (
             "Bạn là trợ lý định tuyến (routing agent) cho hệ thống Multi-Agent.\n"
             "Nhiệm vụ của bạn là phân loại xem câu hỏi của người dùng có yêu cầu thông tin từ tài liệu đã tải lên của họ (sách giáo trình, bài giảng PDF, ghi chú học tập) hay đó là một cuộc trò chuyện/yêu cầu chung.\n\n"
@@ -118,7 +119,7 @@ class MultiAgentOrchestrator:
         )
         if chat_summary:
             system_instruction += f"\nTóm tắt lịch sử hội thoại trước đó: {chat_summary}"
-        history_str = "\n".join([f"{h.get('sender')}: {h.get('text')}" for h in history[-6:]])
+        history_str = "\n".join([f"{h.get('sender')}: {h.get('text')}" for h in history[-12:]])
         prompt = (
             f"--- LỊCH SỬ HỘI THOẠI ---\n{history_str}\n"
             f"--- CÂU HỎI MỚI ---\nNgười dùng: {question}\n"
@@ -143,7 +144,7 @@ class MultiAgentOrchestrator:
         for item in context:
             doc_name = item.get("documentName", f"Tài liệu #{item.get('documentId')}")
             context_str += f"Tài liệu: {doc_name} (ID: {item.get('documentId')}) - Trang {item.get('pageNumber')}\nNội dung:\n{item.get('text')}\n---\n"
-        history_str = "\n".join([f"{h.get('sender')}: {h.get('text')}" for h in history[-6:]])
+        history_str = "\n".join([f"{h.get('sender')}: {h.get('text')}" for h in history[-12:]])
         system_instruction = (
             "Bạn là Trợ lý Học tập AI tích hợp trong hệ thống Mora (Source-Grounded AI Learning Assistant).\n"
             "Nhiệm vụ của bạn là trả lời các câu hỏi học thuật từ người dùng dựa trên ngữ cảnh tài liệu được cung cấp phía dưới.\n\n"
@@ -236,6 +237,7 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
         logger.error("Yêu cầu chat bị từ chối do thiếu Gemini API Key.")
         raise ValueError("Vui lòng cấu hình Gemini API Key trước khi sử dụng.")
 
+    t_start = time.time()
     logger.info(f"Bắt đầu xử lý câu hỏi: {request.question}")
     
     orchestrator = MultiAgentOrchestrator(
@@ -264,20 +266,29 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
     ]
     
     # 1. Router Agent quyết định hướng đi
+    t_router_start = time.time()
     intent = orchestrator.route_agent(request.question, request.chat_summary or "", history)
+    t_router = time.time() - t_router_start
     
     answer = ""
     citations = []
     condensed_question = request.question
     prompt_sent = ""
+    t_retrieval = 0.0
+    t_synthesis_total = 0.0
+    t_eval_total = 0.0
+    attempts_count = 0
     
     # 2. Xử lý theo phân loại
     if intent == "RAG":
+        t_retrieval_start = time.time()
         filtered_context = orchestrator.retrieval_agent(
             question=request.question, 
             space_id=space_id, 
             raw_context=raw_context
         )
+        t_retrieval = time.time() - t_retrieval_start
+        
         if not filtered_context:
             logger.warn(f"[Orchestrator] Không tìm thấy ngữ cảnh nào cho câu hỏi RAG: '{request.question}'")
             answer = "Không tìm thấy thông tin phù hợp trong tài liệu của Không gian học tập này để trả lời câu hỏi của bạn."
@@ -287,24 +298,48 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
         else:
             max_retries = 2
             for attempt in range(max_retries):
+                attempts_count = attempt + 1
                 logger.info(f"[Orchestrator] Synthesis attempt {attempt + 1}")
+                
+                t_synth_start = time.time()
                 rag_result = orchestrator.synthesis_agent(request.question, filtered_context, request.chat_summary or "", history)
+                t_synth = time.time() - t_synth_start
+                t_synthesis_total += t_synth
+                
                 answer = rag_result.get("answer", "")
                 citations = rag_result.get("citations", [])
                 condensed_question = rag_result.get("condensedQuestion", request.question)
                 prompt_sent = rag_result.get("promptSent", "")
                 
                 # Evaluator Agent kiểm QC câu trả lời
+                t_eval_start = time.time()
                 is_faithful, score = orchestrator.evaluator_agent(answer, filtered_context)
+                t_eval = time.time() - t_eval_start
+                t_eval_total += t_eval
+                
                 if is_faithful or score >= 0.7:
-                    logger.info("[Orchestrator] QC passed successfully!")
+                    logger.info(f"[Orchestrator] QC passed! (Score: {score}, Synthesis: {t_synth:.2f}s, Evaluator: {t_eval:.2f}s)")
                     break
                 else:
-                    logger.warning(f"[Orchestrator] QC failed with score {score}. Retrying synthesis...")
+                    logger.warning(f"[Orchestrator] QC failed with score {score} (Synthesis: {t_synth:.2f}s, Evaluator: {t_eval:.2f}s). Retrying synthesis...")
     else:
+        t_synth_start = time.time()
         answer, prompt_sent = orchestrator.general_chat_agent(request.question, request.chat_summary or "", history)
+        t_synthesis_total = time.time() - t_synth_start
         citations = []
         condensed_question = request.question
+
+    t_total = time.time() - t_start
+    if intent == "RAG":
+        logger.info(
+            f"⚡ [Latency Metrics] Tổng thời gian phản hồi: {t_total:.2f}s "
+            f"(Router: {t_router:.2f}s | Retrieval: {t_retrieval:.2f}s | Synthesis ({attempts_count}x): {t_synthesis_total:.2f}s | Evaluator: {t_eval_total:.2f}s)"
+        )
+    else:
+        logger.info(
+            f"⚡ [Latency Metrics] Tổng thời gian phản hồi (General Chat): {t_total:.2f}s "
+            f"(Router: {t_router:.2f}s | Synthesis: {t_synthesis_total:.2f}s)"
+        )
         
     # Map và deduplicate citations sang DTO Citation (gom các quote cùng trang)
     unique_citations = {}
