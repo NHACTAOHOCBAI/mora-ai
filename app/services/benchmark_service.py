@@ -3,19 +3,17 @@ import time
 import json
 from typing import List, Dict, Any
 from loguru import logger
-from datasets import Dataset
-from ragas import evaluate
-from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-
 from app.core.config import settings
 from app.schemas.benchmark import BenchmarkEvaluateRequest, BenchmarkEvaluateResponse, BenchmarkDetailResponse
-
-
 
 def run_ragas_evaluation(request: BenchmarkEvaluateRequest) -> BenchmarkEvaluateResponse:
     logger.info(f"Bắt đầu chạy đánh giá Ragas cho hướng tiếp cận: {request.approach_name}")
     
+    from datasets import Dataset
+    from ragas import evaluate
+    from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall
+    from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+
     # Thiết lập API Key cho Langchain Google GenAI
     os.environ["GOOGLE_API_KEY"] = settings.gemini_api_key
     

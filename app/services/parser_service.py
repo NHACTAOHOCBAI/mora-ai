@@ -8,12 +8,6 @@ from google import genai
 from google.genai import types
 from app.core.config import settings
 
-# Docling imports
-from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.document_converter import DocumentConverter, PdfFormatOption, DocumentStream
-from docling_core.types.doc import PictureItem
-
 def describe_image_with_gemini(client: genai.Client, image_bytes: bytes, ext: str, page_num: int, source_type: str, parser_model: str = None) -> str:
     # Map extension to mime type
     mime_type = "image/png"
@@ -72,6 +66,12 @@ def parse_pdf_layout_and_diagrams(pdf_bytes: bytes, api_key: str = None, parser_
     parsed_pages = []
 
     try:
+        # Lazy import Docling to optimize startup memory
+        from docling.datamodel.base_models import InputFormat
+        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        from docling.document_converter import DocumentConverter, PdfFormatOption, DocumentStream
+        from docling_core.types.doc import PictureItem
+
         # Cấu hình Docling Pipeline
         pipeline_options = PdfPipelineOptions()
         pipeline_options.generate_page_images = False

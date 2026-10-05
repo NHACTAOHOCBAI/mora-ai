@@ -1,18 +1,23 @@
 from typing import List, Dict, Any, Optional
 from loguru import logger
 from google import genai
-from flashrank import Ranker, RerankRequest
-
 from app.core.config import settings
 from app.services.vector_service import vector_store
 
-# Khởi tạo FlashRank Ranker một lần lúc startup (siêu nhẹ, ~5ms trên CPU)
-try:
-    ranker = Ranker(model_name="ms-marco-TinyBERT-L-2-v2")
-    logger.info("Khởi tạo FlashRank Re-ranker (ms-marco-TinyBERT-L-2-v2) thành công!")
-except Exception as e:
-    logger.warn(f"Không thể khởi tạo FlashRank: {e}. Sẽ sử dụng RRF scoring dự phòng.")
-    ranker = None
+_ranker = None
+
+def get_ranker():
+    global _ranker
+    if _ranker is None:
+        try:
+            from flashrank import Ranker
+            _ranker = Ranker(model_name="ms-marco-TinyBERT-L-2-v2")
+            logger.info("Khởi tạo FlashRank Re-ranker (ms-marco-TinyBERT-L-2-v2) thành công!")
+        except Exception as e:
+            logger.warning(f"Không thể khởi tạo FlashRank: {e}. Sẽ sử dụng RRF scoring dự phòng.")
+            _ranker = False
+    return _ranker if _ranker is not False else None
+
 
 def rrf_merge(
     dense_results: List[Dict[str, Any]], 
@@ -98,8 +103,10 @@ def hybrid_retrieve(
         return []
 
     # 4. Stage 2: Re-ranking với FlashRank
-    if ranker and len(merged_candidates) > 1:
+    active_ranker = get_ranker()
+    if active_ranker and len(merged_candidates) > 1:
         try:
+            from flashrank import RerankRequest
             passages = [
                 {
                     "id": item["chunkId"],
@@ -109,7 +116,7 @@ def hybrid_retrieve(
                 for item in merged_candidates
             ]
             rerank_request = RerankRequest(query=query, passages=passages)
-            rerank_results = ranker.rerank(rerank_request)
+            rerank_results = active_ranker.rerank(rerank_request)
 
             final_chunks = []
             for hit in rerank_results[:target_top_k]:
