@@ -20,6 +20,7 @@ class RAGResponseSchema(BaseModel):
     answer: str
     citations: List[CitationSchema]
     condensedQuestion: str
+    hasSufficientInfo: bool
 
 class RouteSchema(BaseModel):
     intent: str  # "RAG" or "GENERAL"
@@ -44,10 +45,10 @@ class MultiAgentOrchestrator:
         history_str = "\n".join([f"{h.get('sender')}: {h.get('text')}" for h in history[-12:]])
         system_instruction = (
             "Bạn là trợ lý định tuyến (routing agent) cho hệ thống Multi-Agent.\n"
-            "Nhiệm vụ của bạn là phân loại xem câu hỏi của người dùng có yêu cầu thông tin từ tài liệu đã tải lên của họ (sách giáo trình, bài giảng PDF, ghi chú học tập) hay đó là một cuộc trò chuyện/yêu cầu chung.\n\n"
+            "Nhiệm vụ của bạn là phân loại xem câu hỏi của người dùng có yêu cầu thông tin từ tài liệu đã tải lên của họ hay đó là một cuộc trò chuyện/yêu cầu chung.\n\n"
             "Quy tắc:\n"
-            "1. Phân loại là 'RAG' nếu câu hỏi đề cập đến tài liệu học tập, các slide cụ thể, nội dung bài học, công thức trong tài liệu hoặc các thuật ngữ chuyên sâu liên quan đến môn học.\n"
-            "2. Phân loại là 'GENERAL' nếu đó là cuộc trò chuyện thông thường (chitchat), yêu cầu viết code, viết email, giải toán chung, lịch sử chung, dịch thuật hoặc khi câu hỏi rõ ràng không cần ngữ cảnh tài liệu.\n"
+            "1. Mặc định phân loại là 'RAG' cho TẤT CẢ các câu hỏi hỏi về kiến thức, học thuật, khái niệm, lý luận, lý thuyết chuyên ngành (ngay cả khi người dùng không nhắc chữ 'tài liệu' hay 'bài giảng'). RAG là ưu tiên hàng đầu trong môi trường học tập.\n"
+            "2. Chỉ phân loại là 'GENERAL' khi câu hỏi thuần túy là giao tiếp xã giao (chào hỏi), hoặc các yêu cầu rõ ràng nằm ngoài việc học như: viết code độc lập, viết email, dịch thuật ngẫu nhiên, hoặc khi người dùng yêu cầu bỏ qua tài liệu.\n"
             "3. Trả về phản hồi theo đúng cấu trúc JSON được yêu cầu."
         )
         prompt = (
@@ -122,7 +123,7 @@ class MultiAgentOrchestrator:
             "4. In đậm (**từ khóa**, **khái niệm chính**) và sử dụng `inline code` cho thuật ngữ kỹ thuật, biến, hàm.\n"
             "5. Sử dụng khối code có highlight cú pháp hoặc Bảng Markdown (| Cột 1 | Cột 2 |) khi thích hợp.\n"
             "6. Nếu người dùng yêu cầu tạo đề kiểm tra, bài thi hoặc các câu hỏi trắc nghiệm/tự luận, hãy lịch sự từ chối và nhắc họ rằng bạn chỉ tập trung hỗ trợ giải đáp thắc mắc kiến thức.\n"
-            "7. Nếu người dùng đề cập đến tài liệu học tập của họ, hãy lịch sự nhắc họ rằng đây là chế độ chat tự do và bạn không sử dụng tài liệu học tập cho câu hỏi này."
+            "7. Chỉ nhắc nhở người dùng đây là chế độ chat tự do NẾU họ cố tình hỏi thông tin nằm trong tài liệu mà hệ thống bị thiếu context. Còn bình thường hãy trả lời tự nhiên."
         )
         if chat_summary:
             system_instruction += f"\nTóm tắt lịch sử hội thoại trước đó: {chat_summary}"
@@ -157,7 +158,7 @@ class MultiAgentOrchestrator:
             "Nhiệm vụ của bạn là trả lời các câu hỏi học thuật từ người dùng dựa trên ngữ cảnh tài liệu được cung cấp phía dưới.\n\n"
             "HÃY TUÂN THỦ CÁC QUY TẮC SAU MỘT CÁCH NGHIÊM NGẶT:\n"
             "1. TÍNH TRUNG THỰC & CHÍNH XÁC: Trả lời trung thực, khách quan và chính xác dựa trên tài liệu. Không bịa đặt hoặc suy diễn vượt quá tài liệu.\n"
-            "2. THIẾU THÔNG TIN: Nếu tài liệu không có thông tin để trả lời câu hỏi, hãy trả lời rõ ràng rằng bạn không tìm thấy thông tin này trong tài liệu.\n"
+            "2. THIẾU THÔNG TIN: Trả về 'hasSufficientInfo': true nếu tài liệu có ĐỦ thông tin. Nếu tài liệu KHÔNG CÓ đủ thông tin để trả lời trọn vẹn câu hỏi, hãy đặt 'hasSufficientInfo': false và để trống trường 'answer'.\n"
             "3. TRÍCH DẪN NGUỒN (CITATIONS): Trích dẫn nguồn cụ thể cho các thông tin quan trọng. Mỗi trích dẫn (citation) cần có đúng số trang (pageNumber), đoạn trích nguyên văn (quote), và thông tin tài liệu (documentId, documentName) nếu có.\n"
             "4. QUY CHUẨN ĐỊNH DẠNG MARKDOWN TRỰC QUAN, DỄ ĐỌC (BẮT BUỘC TUÂN THỦ):\n"
             "   - TUYỆT ĐỐI KHÔNG VIẾT DỒN CẢ CÂU TRẢ LỜI THÀNH MỘT ĐOẠN VĂN DÀI LIỀN TÙ TÌ.\n"
@@ -288,6 +289,8 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
     attempts_count = 0
     
     # 2. Xử lý theo phân loại
+    is_rag_success = False
+
     if intent == "RAG":
         t_retrieval_start = time.time()
         filtered_context = orchestrator.retrieval_agent(
@@ -299,11 +302,7 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
         t_retrieval = time.time() - t_retrieval_start
         
         if not filtered_context:
-            logger.warn(f"[Orchestrator] Không tìm thấy ngữ cảnh nào cho câu hỏi RAG: '{request.question}'")
-            answer = "Không tìm thấy thông tin phù hợp trong tài liệu của Không gian học tập này để trả lời câu hỏi của bạn."
-            citations = []
-            condensed_question = request.question
-            prompt_sent = ""
+            logger.warn(f"[Orchestrator] Không tìm thấy ngữ cảnh nào cho câu hỏi RAG: '{request.question}'. Sẽ chuyển sang GENERAL fallback.")
         else:
             max_retries = 2
             for attempt in range(max_retries):
@@ -314,6 +313,11 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
                 rag_result = orchestrator.synthesis_agent(request.question, filtered_context, request.chat_summary or "", history)
                 t_synth = time.time() - t_synth_start
                 t_synthesis_total += t_synth
+                
+                has_info = rag_result.get("hasSufficientInfo", True)
+                if not has_info:
+                    logger.warning("[Orchestrator] Document lacks sufficient info (hasSufficientInfo=False). Triggering fallback.")
+                    break
                 
                 answer = rag_result.get("answer", "")
                 citations = rag_result.get("citations", [])
@@ -328,13 +332,24 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
                 
                 if is_faithful or score >= 0.7:
                     logger.info(f"[Orchestrator] QC passed! (Score: {score}, Synthesis: {t_synth:.2f}s, Evaluator: {t_eval:.2f}s)")
+                    is_rag_success = True
                     break
                 else:
                     logger.warning(f"[Orchestrator] QC failed with score {score} (Synthesis: {t_synth:.2f}s, Evaluator: {t_eval:.2f}s). Retrying synthesis...")
-    else:
+
+    # Nếu intent là GENERAL, hoặc RAG fail (không có context, hoặc thiếu info)
+    if intent == "GENERAL" or (intent == "RAG" and not is_rag_success):
+        logger.info("[Orchestrator] Executing General Chat Agent (either intended or via RAG Fallback)")
         t_synth_start = time.time()
-        answer, prompt_sent = orchestrator.general_chat_agent(request.question, request.chat_summary or "", history)
-        t_synthesis_total = time.time() - t_synth_start
+        general_answer, prompt_sent = orchestrator.general_chat_agent(request.question, request.chat_summary or "", history)
+        t_synthesis_total += time.time() - t_synth_start
+        
+        if intent == "RAG":
+            # Tiền tố thông báo fallback
+            answer = "⚠️ *Tài liệu học tập không chứa thông tin để trả lời câu hỏi này. Tuy nhiên, dựa trên kiến thức chung của AI:*\n\n" + general_answer
+        else:
+            answer = general_answer
+            
         citations = []
         condensed_question = request.question
 
