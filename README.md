@@ -1,158 +1,166 @@
----
-title: Mora AI Service
-emoji: 🧠
-colorFrom: indigo
-colorTo: blue
-sdk: docker
-app_port: 8000
-pinned: false
----
-
 # Mora AI Service
 
-Mora AI Service là một Python-based microservice được xây dựng bằng **FastAPI** và thư viện **Google GenAI SDK** chính thức từ Google. Dịch vụ này chịu trách nhiệm xử lý toàn bộ các tác vụ liên quan đến trí tuệ nhân tạo (AI) và tích hợp mô hình **Gemini** (ví dụ: `gemini-3.1-flash-lite`) cho dự án Mạng xã hội học tập Mora.
+AI microservice của Mora, cung cấp chức năng phân tích PDF, lập chỉ mục tài liệu, truy xuất RAG và chat với Gemini.
 
-Dịch vụ này được kết nối trực tiếp từ Spring Boot backend (`mora-backend`) qua giao thức HTTP REST API.
+## Vai trò trong kiến trúc
 
----
-
-## Tính năng nổi bật
-
-1. **Document Chat (`/api/chat/document`)**: Hỏi đáp trực tiếp trên nội dung tài liệu (hỗ trợ văn bản và phân tích hình ảnh Base64). Tự động rút gọn lịch sử chat.
-2. **Space Chat (`/api/chat/space`)**: Hỏi đáp đa tài liệu trong một Không gian học tập (hỗ trợ đọc đồng thời nhiều file văn bản và tối đa 3 hình ảnh).
-3. **Study Notes Generation (`/api/study/notes`)**: Tự động sinh tóm tắt thông tin chi tiết bằng định dạng Markdown và xuất danh sách câu hỏi ôn tập (Flashcards) dạng cấu trúc JSON sạch.
-4. **Định dạng bảng và so sánh nâng cao (Advanced Comparisons)**: Tự động phân tích các yêu cầu so sánh, đối chiếu hoặc phân biệt khái niệm giữa các tài liệu và trả về kết cấu Bảng Markdown hoặc danh sách đối chiếu tối ưu. Yêu cầu chèn ký tự xuống dòng `\n` thực tế ở cuối mỗi hàng để phục vụ render Frontend.
-5. **FastAPI Swagger UI (`/docs`)**: Tự động tạo đặc tả API và giao diện chạy thử nghiệp trực quan.
-6. **Pydantic Settings**: Kiểm định nghiêm ngặt các cài đặt biến môi trường và cấu hình lúc khởi động.
-
----
-
-## Cấu trúc thư mục
-
-```text
-mora-ai/
-├── app/
-│   ├── __init__.py
-│   ├── main.py                     # Khởi tạo ứng dụng FastAPI và đăng ký routers
-│   ├── core/
-│   │   └── config.py               # Quản lý cấu hình qua BaseSettings (đọc file .env)
-│   ├── schemas/
-│   │   └── chat.py                 # Pydantic Schemas đầu vào/đầu ra (DTO)
-│   ├── api/
-│   │   └── v1/
-│   │       ├── api.py              # Gom các router con
-│   │       └── endpoints/
-│   │           ├── chat.py         # Endpoints hỏi đáp tài liệu & không gian học tập
-│   │           └── study.py        # Endpoints sinh tóm tắt & flashcards
-│   └── services/
-│       └── gemini_service.py       # Tích hợp Google GenAI SDK & nghiệp vụ AI
-├── requirements.txt                # Thư viện phụ thuộc
-├── .gitignore                      # Cấu hình bỏ qua tệp tin rác Git
-└── README.md                       # Hướng dẫn này
+```mermaid
+flowchart LR
+  FE[React Frontend] --> BE[Spring Boot Backend]
+  BE -->|HTTP| AI[FastAPI AI Service\n:8000]
+  AI -->|PDF parse / chat / embeddings| G[Google Gemini]
+  AI -->|vector + sparse retrieval| Q[(Qdrant\n:6333 / :6334)]
+  BE --> PG[(PostgreSQL)]
+  BE --> R2[Cloudflare R2]
 ```
 
----
+Frontend không gọi AI Service trực tiếp. Backend chịu trách nhiệm xác thực, lưu metadata/tệp và gọi AI Service qua HTTP. AI Service sử dụng Qdrant để lưu vector/chunk và Gemini cho parse, embedding, tạo câu trả lời và đánh giá.
 
-## Kiến trúc Chatbot (Multi-Agent)
+## Khả năng chính
 
-Hệ thống chatbot trong Mora sử dụng kiến trúc **Multi-Agent** đồng bộ để điều hướng, sinh câu trả lời và kiểm định chất lượng phản hồi trước khi trả về cho người dùng.
+- Phân tích PDF theo trang, hỗ trợ nội dung và bố cục/diagram qua Gemini.
+- Semantic chunking, tạo embedding và index tài liệu vào Qdrant.
+- Hybrid retrieval (dense + BM25), rerank bằng FlashRank và trả citation cho chat.
+- Chat, tóm tắt chat, kiểm tra Gemini API key.
+
+```text
+app/
+├── api/v1/endpoints/  # Endpoint chat, parse và index
+├── core/              # Settings từ biến môi trường
+├── schemas/           # Pydantic request/response model
+└── services/          # Parse, chunking, vector, retrieval và chat
+```
+
+## Kiến trúc chatbot
+
+AI Service triển khai chatbot theo mô hình điều phối nhiều agent. Backend truyền câu hỏi, lịch sử, bản tóm tắt, không gian, document được chọn và API key/model của từng người dùng; service trả về answer, citation, câu hỏi đã cô đọng và metadata prompt. API key không được lưu tại AI Service.
 
 ```mermaid
 sequenceDiagram
-    autonumber
-    FE (React)->>BE (Spring Boot): POST /api/chat/space
-    Note over BE (Spring Boot): Lấy context trang tài liệu từ DB<br/>Lưu tin nhắn User vào DB
-    BE (Spring Boot)->>AI Service (FastAPI): POST /api/chat (Question, Context, History, Summary)
-    
-    Note over AI Service (FastAPI): Vận hành Multi-Agent Orchestrator
-    AI Service (FastAPI)->>Gemini: 1. Router Agent (Phân loại intent: RAG hoặc GENERAL)
-    Gemini-->>AI Service (FastAPI): Trả về intent
+  participant U as Người dùng
+  participant FE as Frontend
+  participant BE as Backend
+  participant AI as AI Service
+  participant R as Router Agent
+  participant Q as Qdrant + BM25
+  participant G as Gemini
+  participant E as Evaluator Agent
+  participant WS as STOMP
 
-    alt Intent = RAG (Hỏi đáp dựa trên tài liệu)
-        AI Service (FastAPI)->>Gemini: 2. Synthesis Agent (Tổng hợp câu trả lời dựa trên context)
-        Gemini-->>AI Service (FastAPI): Trả về câu trả lời + Trích dẫn nguồn (Citations JSON)
-        AI Service (FastAPI)->>Gemini: 3. Evaluator Agent (QC Check chống bịa đặt / hallucination)
-        Gemini-->>AI Service (FastAPI): Trả về điểm trung thực (Faithfulness Score)
-        Note over AI Service (FastAPI): Nếu score < 0.7: Sinh lại câu trả lời (Tối đa 2 lần)
-    else Intent = GENERAL (Chitchat ôn tập chung)
-        AI Service (FastAPI)->>Gemini: 2. General Chat Agent (Trả lời bằng tri thức sẵn có)
-        Gemini-->>AI Service (FastAPI): Trả về câu trả lời
-    end
-
-    AI Service (FastAPI)-->>BE (Spring Boot): Trả về kết quả cuối cùng
-    Note over BE (Spring Boot): Lưu tin nhắn Assistant vào DB
-    BE (Spring Boot)-->>FE (React): Trả về câu trả lời hoàn chỉnh
+  U->>FE: Đặt câu hỏi trong space
+  FE->>BE: POST /api/chat/space (JWT, history, documentIds)
+  BE-->>WS: Broadcast AI_QUERY
+  BE->>AI: POST /api/chat (key, models, context, summary)
+  AI->>R: Phân loại RAG hoặc GENERAL
+  alt RAG
+    AI->>G: Tạo embedding cho câu hỏi
+    AI->>Q: Dense search + BM25 search
+    Q-->>AI: Candidate chunks
+    AI->>AI: RRF fusion và FlashRank rerank
+    AI->>G: Synthesis theo context
+    AI->>E: Kiểm định faithfulness
+    E-->>AI: Pass hoặc retry/fallback
+  else GENERAL
+    AI->>G: General chat
+  end
+  AI-->>BE: Answer, citations, condensed question
+  BE-->>WS: Broadcast AI_RESPONSE
+  WS-->>FE: Hiển thị kết quả và nguồn
 ```
 
-### 1. Vai trò của từng Agent
-* **Router Agent**: Nhận câu hỏi mới nhất, tóm tắt lịch sử hội thoại cũ và 4 câu thoại gần nhất. Agent sử dụng Gemini API để phân loại thông minh câu hỏi thuộc nhóm **RAG** (câu hỏi học thuật, cần tra cứu trực tiếp trong tài liệu của Space) hay **GENERAL** (câu hỏi giao tiếp, giải toán chung, dịch thuật, viết code chung không cần context tài liệu).
-* **Retrieval Agent**: Tiếp nhận các trang ngữ cảnh thô được truyền từ Backend sang và chọn lọc/sắp xếp các đoạn thông tin có giá trị nhất trước khi đưa vào Agent tổng hợp.
-* **Synthesis Agent**: Chịu trách nhiệm tổng hợp thông tin, ghép câu hỏi mới, ngữ cảnh được lọc, lịch sử ngắn hạn và dài hạn để tạo ra câu trả lời chi tiết. Nếu xử lý luồng RAG, Agent bắt buộc phải xuất ra các **trích dẫn cụ thể (Citations)** có số trang và câu trích nguyên văn dưới dạng JSON cấu trúc.
-* **Evaluator Agent (QC Check)**: Đóng vai trò kiểm tra chất lượng. Agent nhận câu trả lời được sinh ra và đối chiếu trực tiếp với ngữ cảnh tài liệu gốc để phát hiện lỗi bịa đặt thông tin (hallucination). Nếu điểm tin cậy dưới `0.7`, hệ thống sẽ kích hoạt *Synthesis Agent* sinh lại câu trả lời mới để đảm bảo độ trung thực tối đa.
+### Các agent và dữ liệu đi qua chúng
 
-### 2. Cơ chế quản lý Bộ nhớ (Memory Management)
-Để cân bằng giữa chi phí token, giới hạn ngữ cảnh của LLM và khả năng ghi nhớ thông tin, chatbot kết hợp 2 lớp bộ nhớ:
-* **Bộ nhớ ngắn hạn (Short-term Memory)**: AI Service tự động cắt lấy **6 tin nhắn gần nhất** (`history[-6:]`) để chuyển tiếp trực tiếp vào prompt của LLM.
-* **Bộ nhớ dài hạn (Long-term Memory)**: Sau mỗi lượt hội thoại thành công, Spring Boot backend sẽ kích hoạt chạy ngầm gọi AI Service tóm tắt nội dung hội thoại mới và cập nhật bản tóm tắt (`chatSummary` giới hạn dưới 150 từ) vào DB. Bản tóm tắt này luôn được gửi kèm trong mọi lượt hỏi tiếp theo để giúp AI hiểu được chủ đề thảo luận dài hạn.
+| Thành phần | Đầu vào | Xử lý | Đầu ra |
+| --- | --- | --- | --- |
+| Router Agent | Câu hỏi, tối đa 12 message gần nhất, chat summary | Gemini phân loại ý định `RAG` hoặc `GENERAL` | Nhánh xử lý phù hợp. Mặc định ưu tiên RAG cho câu hỏi học thuật. |
+| Retrieval Agent | Câu hỏi, `spaceId`, `documentIds` tùy chọn | Tạo query embedding; truy vấn dense ở Qdrant và sparse BM25; RRF hợp nhất; FlashRank chọn top-K | Context chunk gồm nội dung, tài liệu, trang và section. |
+| Synthesis Agent | Câu hỏi, context, history, summary | Gemini tạo JSON có answer, citation, câu hỏi cô đọng và cờ đủ thông tin | Câu trả lời RAG có citation theo tài liệu/trang. |
+| Evaluator Agent | Answer và context đã chọn | Gemini chấm faithfulness và phát hiện hallucination | Pass nếu faithful hoặc điểm từ `0.7`; nếu không, thử synthesis lại. |
+| General Chat Agent | Câu hỏi, history, summary | Gemini trả lời kiến thức chung, không dựa vào document | Câu trả lời không citation. |
 
----
+### Luồng RAG chi tiết
 
-## Yêu cầu hệ thống
+1. Router chọn `RAG` khi câu hỏi liên quan tới kiến thức/tài liệu; người dùng có thể giới hạn phạm vi bằng `documentIds`.
+2. Retrieval Agent dùng `GEMINI_EMBEDDING_MODEL` để embed câu hỏi, tìm dense vector trong Qdrant và BM25 sparse trong vector store.
+3. Reciprocal Rank Fusion (RRF) hợp nhất hai tập kết quả thành tối đa 20 candidate. FlashRank rerank candidate và trả `RETRIEVAL_TOP_K` chunk tốt nhất; nếu FlashRank lỗi, thứ hạng RRF là phương án dự phòng.
+4. Synthesis Agent chỉ dẫn Gemini trả lời bám sát context và trả citation có `documentId`, `documentName`, `pageNumber` và quote. AI Service gộp citation trùng tài liệu/trang trước khi trả về Backend.
+5. Evaluator Agent kiểm tra answer với context. Nếu không faithful và điểm dưới `0.7`, service synthesis lại tối đa một lần nữa (hai attempt tổng cộng).
 
-* Python 3.10 trở lên.
-* Khóa API Key của Google Gemini (`GEMINI_API_KEY`).
+### Fallback và quản lý hội thoại
 
----
+- Nếu Router chọn `GENERAL`, chatbot trả lời bằng General Chat ngay, không có citation.
+- Nếu RAG không tìm được context, tài liệu không đủ thông tin hoặc không qua kiểm định sau các attempt, chatbot chuyển sang General Chat. Khi fallback từ RAG, câu trả lời có cảnh báo rằng tài liệu không đủ thông tin và không có citation.
+- Prompt chỉ dùng tối đa 12 message lịch sử gần nhất, cùng chat summary do Backend cung cấp. Backend tạo/cập nhật summary sau mỗi 6 phản hồi assistant để giữ context dài hạn mà không phải gửi toàn bộ lịch sử.
+- Khi không có kết quả retrieval, AI Service có thể dùng `context` thô do Backend gửi làm phương án dự phòng; nếu context này cũng trống thì chuyển General Chat.
 
-## Hướng dẫn cài đặt & Khởi chạy nhanh
+Các model và ngưỡng retrieval được điều chỉnh qua cài đặt người dùng do Backend gửi hoặc biến môi trường đã nêu ở phần cấu hình. Để biết cơ chế lưu lịch sử, phân quyền và broadcast, xem [README Backend](../mora-backend/README.md#điều-phối-chatbot).
 
-### 1. Cấu hình biến môi trường
-Dịch vụ này tự động tìm kiếm file `.env` từ thư mục `mora-backend/.env` lân cận hoặc file `.env` tại thư mục gốc của nó. Hãy đảm bảo bạn cấu hình các biến sau:
+## API
+
+Service chạy dưới prefix `/api`:
+
+| Endpoint | Chức năng |
+| --- | --- |
+| `POST /api/chat` | Tạo phản hồi chat RAG/Gemini. |
+| `POST /api/chat/summarize` | Tóm tắt lịch sử chat. |
+| `POST /api/chat/validate-key` | Kiểm tra Gemini API key và model. |
+| `POST /api/index` | Chunk, embed và index trang tài liệu vào Qdrant. |
+| `POST /api/parse` | Phân tích tệp PDF. |
+
+Tài liệu tương tác theo schema hiện hành có tại `http://localhost:8000/docs`; ReDoc có tại `http://localhost:8000/redoc`.
+
+## Yêu cầu
+
+- Python 3.11+ (Docker image dùng Python 3.11).
+- Qdrant, mặc định `localhost:6333` và gRPC `6334`.
+- Gemini API key cho chức năng cần mô hình Google.
+
+Khởi động Qdrant bằng Docker Compose ở repo Backend:
+
+```bash
+cd ../mora-backend
+docker compose up -d qdrant
+cd ../mora-ai
+```
+
+## Cấu hình môi trường
+
+`Settings` hỗ trợ đọc cả `.env` cục bộ và `../mora-backend/.env`. Có thể tạo `.env` trong repo này với các giá trị sau:
+
 ```env
-GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_API_KEY=your_key
 GEMINI_MODEL_NAME=gemini-3.1-flash-lite
-GEMINI_TEMPERATURE=0.0
+QDRANT_HOST=localhost
+QDRANT_PORT=6333
+QDRANT_GRPC_PORT=6334
 ```
 
-### 2. Cài đặt các thư viện phụ thuộc
-Tại thư mục `mora-ai/`:
+Các biến tùy chọn khác gồm `QDRANT_URL`, `QDRANT_API_KEY`, `GEMINI_EMBEDDING_MODEL`, `GEMINI_EVALUATOR_MODEL_NAME`, `GEMINI_EVALUATOR_EMBEDDINGS_MODEL_NAME`, `RETRIEVAL_TOP_K`, `RETRIEVAL_DENSE_LIMIT` và `RETRIEVAL_SPARSE_LIMIT`. Không commit API key.
 
-**Trên Windows:**
+## Chạy local
+
 ```bash
-# Tạo môi trường ảo
 python -m venv venv
-
-# Kích hoạt môi trường ảo
-venv\Scripts\activate
-
-# Cài đặt thư viện
+source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**Trên macOS / Linux:**
+Kiểm tra nhanh:
+
 ```bash
-# Tạo môi trường ảo
-python3 -m venv venv
-
-# Kích hoạt môi trường ảo
-source venv/bin/activate
-
-# Cài đặt thư viện
-pip install -r requirements.txt
+curl http://localhost:8000/api/hello
 ```
 
-### 3. Khởi chạy Server
-Chạy lệnh khởi động Uvicorn:
+## Chạy bằng Docker
+
 ```bash
-uvicorn app.main:app --port 8000 --reload
+docker build -t mora-ai .
+docker run --env-file .env -p 8000:8000 mora-ai
 ```
 
-Server sẽ chạy tại địa chỉ: `http://localhost:8000`.
+Khi chạy container, đặt `QDRANT_URL` hoặc `QDRANT_HOST` phù hợp với mạng Docker; `localhost` bên trong container không trỏ về máy host.
 
----
+## Tích hợp Backend
 
-## Tài liệu API (API Documentation)
-
-Khi server đang hoạt động, bạn có thể truy cập các trang tài liệu tự sinh:
-* **Swagger UI (Khuyên dùng)**: [http://localhost:8000/docs](http://localhost:8000/docs)
-* **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+Backend mặc định gọi service tại `http://localhost:8000`; thay đổi bằng `AI_SERVICE_URL` trong `.env` của Backend. Hướng dẫn chạy toàn bộ stack có tại [`../mora-backend/README.md`](../mora-backend/README.md).
