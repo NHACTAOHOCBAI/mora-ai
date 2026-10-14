@@ -28,7 +28,7 @@ def index_endpoint(request: IndexRequest):
     api_key = request.apiKey or settings.gemini_api_key
     if not api_key:
         logger.error("Không tìm thấy Gemini API Key để tạo Embeddings.")
-        raise HTTPException(status_code=400, detail="Gemini API Key is required for generating embeddings.")
+        raise HTTPException(status_code=400, detail="Cần cấu hình Gemini API Key để xử lý tài liệu.")
 
     # 1. Phân đoạn Semantic Chunks theo AST
     pages_dict = [{"pageNumber": p.pageNumber, "text": p.text} for p in request.pages]
@@ -71,7 +71,7 @@ def index_endpoint(request: IndexRequest):
         logger.info(f"Tạo thành công {len(embeddings)} vector embeddings!")
     except Exception as e:
         logger.error(f"Lỗi trong quá trình tạo Gemini Embeddings: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to generate embeddings: {str(e)}")
+        raise HTTPException(status_code=500, detail="Không thể tạo chỉ mục cho tài liệu. Vui lòng thử lại sau.")
 
     # 3. Nạp vào Qdrant Container và BM25 Index
     try:
@@ -84,7 +84,7 @@ def index_endpoint(request: IndexRequest):
         logger.info(f"Lập chỉ mục thành công cho Document ID {request.documentId} vào Qdrant & BM25!")
     except Exception as e:
         logger.error(f"Lỗi khi nạp chunks vào Qdrant: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to upsert to Qdrant: {str(e)}")
+        raise HTTPException(status_code=500, detail="Không thể lưu chỉ mục tài liệu. Vui lòng thử lại sau.")
 
     return {
         "status": "success", 
