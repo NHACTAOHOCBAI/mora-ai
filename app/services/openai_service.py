@@ -29,7 +29,9 @@ def generate(client, model, prompt, instructions, schema=None):
     except OpenAIError as error:
         logger.error("OpenAI request failed: type={}, HTTP={}", type(error).__name__,
                      getattr(error, "status_code", None))
-        raise RuntimeError(AI_ERROR) from None
+        safe_error = RuntimeError(AI_ERROR)
+        safe_error.status_code = getattr(error, "status_code", None)
+        raise safe_error from None
 
 def embed(client, texts):
     response = client.embeddings.create(model=settings.openai_embedding_model,

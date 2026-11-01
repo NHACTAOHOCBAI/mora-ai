@@ -186,3 +186,7 @@ Khi chạy container, đặt `QDRANT_URL` hoặc `QDRANT_HOST` phù hợp với 
 ## Tích hợp Backend
 
 Backend mặc định gọi service tại `http://localhost:8000`; thay đổi bằng `AI_SERVICE_URL` trong `.env` của Backend. Hướng dẫn chạy toàn bộ stack có tại [`../mora-backend/README.md`](../mora-backend/README.md).
+
+## Benchmark RAG
+
+Trang admin `/admin/benchmarks` quản lý dataset, ground truth, run và kết quả. Xem [hướng dẫn benchmark](benchmarks/README.md).

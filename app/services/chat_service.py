@@ -6,6 +6,7 @@ from loguru import logger
 from app.services.openai_service import get_client, generate, AI_ERROR
 
 from app.core.config import settings
+from app.core.execution_trace import event, failure, execution_trace
 from app.schemas.chat import ChatRequest, ChatResponse, Citation, ChatSummarizeRequest, ChatSummarizeResponse
 
 # Definitions for structured JSON schema response from agents
@@ -59,7 +60,8 @@ class MultiAgentOrchestrator:
             intent = result.get("intent", "GENERAL").upper()
             logger.info(f"[Router Agent] Decision: {intent} (Reason: {result.get('reason')})")
             return intent
-        except Exception:
+        except Exception as error:
+            failure("router", error)
             raise RuntimeError(AI_ERROR) from None
 
     def retrieval_agent(
@@ -80,6 +82,7 @@ class MultiAgentOrchestrator:
                     document_ids=document_ids
                 )
                 if retrieved_chunks:
+                    event("retrieval", contextSource="hybrid")
                     mapped_context = []
                     for c in retrieved_chunks:
                         content_text = c.get("enrichedContent") or c.get("content") or ""
@@ -92,10 +95,12 @@ class MultiAgentOrchestrator:
                         })
                     logger.info(f"[Retrieval Agent] Hybrid Search thành công! Chọn {len(mapped_context)} chunks tinh hoa cung cấp cho Synthesis Agent.")
                     return mapped_context
-            except Exception:
+            except Exception as error:
+                failure("retrieval", error)
                 raise RuntimeError(AI_ERROR) from None
 
         logger.info(f"[Retrieval Agent] Sử dụng raw_context đầu vào. Tổng số: {len(raw_context) if raw_context else 0}")
+        event("retrieval", contextSource="raw_context")
         return raw_context or []
 
     def general_chat_agent(self, question: str, chat_summary: str, history: List[dict]) -> Tuple[str, str]:
@@ -122,7 +127,8 @@ class MultiAgentOrchestrator:
         try:
             response = generate(self.client, self.chat_model, prompt, system_instruction)
             return response, system_instruction + "\n\n" + prompt
-        except Exception:
+        except Exception as error:
+            failure("general", error)
             raise RuntimeError(AI_ERROR) from None
 
     def synthesis_agent(self, question: str, context: List[dict], chat_summary: str, history: List[dict]) -> dict:
@@ -162,10 +168,11 @@ class MultiAgentOrchestrator:
             result = json.loads(response)
             result["promptSent"] = system_instruction + "\n\n" + prompt
             return result
-        except Exception:
+        except Exception as error:
+            failure("synthesis", error)
             raise RuntimeError(AI_ERROR) from None
 
-    def evaluator_agent(self, answer: str, context: List[dict]) -> Tuple[bool, float]:
+    def evaluator_agent(self, answer: str, context: List[dict]) -> Tuple[bool, Optional[float]]:
         logger.info(f"[Evaluator Agent] Performing QC using model '{self.evaluator_model}'.")
         if not context:
             return True, 1.0
@@ -185,17 +192,20 @@ class MultiAgentOrchestrator:
         )
         try:
             response = generate(self.client, self.evaluator_model, prompt, system_instruction, EvaluationSchema)
-            result = json.loads(response)
-            is_faithful = result.get("is_faithful", True)
-            score = result.get("score", 1.0)
+            result = EvaluationSchema.model_validate_json(response)
+            is_faithful = result.is_faithful
+            score = result.score
             logger.info(f"[Evaluator Agent] Quality score: {score} (Is Faithful: {is_faithful})")
             return is_faithful, score
-        except Exception:
+        except Exception as error:
+            failure("evaluator", error)
+            if execution_trace.get() is not None:
+                return False, None
             raise RuntimeError(AI_ERROR) from None
 
 
 def generate_chat_response(request: ChatRequest) -> ChatResponse:
-    t_start = time.time()
+    t_start = time.perf_counter()
     orchestrator = MultiAgentOrchestrator()
 
     space_id = request.space_id or request.spaceId
@@ -217,9 +227,9 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
     ]
     
     # 1. Router Agent quyết định hướng đi
-    t_router_start = time.time()
+    t_router_start = time.perf_counter()
     intent = orchestrator.route_agent(request.question, request.chat_summary or "", history)
-    t_router = time.time() - t_router_start
+    t_router = time.perf_counter() - t_router_start
     
     answer = ""
     citations = []
@@ -232,16 +242,19 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
     
     # 2. Xử lý theo phân loại
     is_rag_success = False
+    qc_unavailable = False
+    qc_status = "not_run"
+    filtered_context = []
 
     if intent == "RAG":
-        t_retrieval_start = time.time()
+        t_retrieval_start = time.perf_counter()
         filtered_context = orchestrator.retrieval_agent(
             question=request.question, 
             space_id=space_id, 
             raw_context=raw_context,
             document_ids=document_ids
         )
-        t_retrieval = time.time() - t_retrieval_start
+        t_retrieval = time.perf_counter() - t_retrieval_start
         
         if not filtered_context:
             logger.warning(f"[Orchestrator] Không tìm thấy ngữ cảnh nào cho câu hỏi RAG: '{request.question}'. Sẽ chuyển sang GENERAL fallback.")
@@ -251,9 +264,9 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
                 attempts_count = attempt + 1
                 logger.info(f"[Orchestrator] Synthesis attempt {attempt + 1}")
                 
-                t_synth_start = time.time()
+                t_synth_start = time.perf_counter()
                 rag_result = orchestrator.synthesis_agent(request.question, filtered_context, request.chat_summary or "", history)
-                t_synth = time.time() - t_synth_start
+                t_synth = time.perf_counter() - t_synth_start
                 t_synthesis_total += t_synth
                 
                 has_info = rag_result.get("hasSufficientInfo", True)
@@ -267,24 +280,30 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
                 prompt_sent = rag_result.get("promptSent", "")
                 
                 # Evaluator Agent kiểm QC câu trả lời
-                t_eval_start = time.time()
+                t_eval_start = time.perf_counter()
                 is_faithful, score = orchestrator.evaluator_agent(answer, filtered_context)
-                t_eval = time.time() - t_eval_start
+                t_eval = time.perf_counter() - t_eval_start
                 t_eval_total += t_eval
                 
+                if score is None:
+                    qc_unavailable = True
+                    qc_status = "error"
+                    break
                 if is_faithful or score >= 0.7:
+                    qc_status = "passed"
                     logger.info(f"[Orchestrator] QC passed! (Score: {score}, Synthesis: {t_synth:.2f}s, Evaluator: {t_eval:.2f}s)")
                     is_rag_success = True
                     break
                 else:
+                    qc_status = "failed"
                     logger.warning(f"[Orchestrator] QC failed with score {score} (Synthesis: {t_synth:.2f}s, Evaluator: {t_eval:.2f}s). Retrying synthesis...")
 
     # Nếu intent là GENERAL, hoặc RAG fail (không có context, hoặc thiếu info)
-    if intent == "GENERAL" or (intent == "RAG" and not is_rag_success):
+    if intent == "GENERAL" or (intent == "RAG" and not is_rag_success and not qc_unavailable):
         logger.info("[Orchestrator] Executing General Chat Agent (either intended or via RAG Fallback)")
-        t_synth_start = time.time()
+        t_synth_start = time.perf_counter()
         general_answer, prompt_sent = orchestrator.general_chat_agent(request.question, request.chat_summary or "", history)
-        t_synthesis_total += time.time() - t_synth_start
+        t_synthesis_total += time.perf_counter() - t_synth_start
         
         if intent == "RAG":
             # Tiền tố thông báo fallback
@@ -295,7 +314,7 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
         citations = []
         condensed_question = request.question
 
-    t_total = time.time() - t_start
+    t_total = time.perf_counter() - t_start
     if intent == "RAG":
         logger.info(
             f"⚡ [Latency Metrics] Tổng thời gian phản hồi: {t_total:.2f}s "
@@ -339,6 +358,11 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
         for item in unique_citations.values()
     ]
         
+    event("pipeline", intent=intent, fallback=intent == "RAG" and not is_rag_success and not qc_unavailable,
+          qcStatus=qc_status, contexts=filtered_context, synthesisAttempts=attempts_count,
+          timings={"totalMs": (time.perf_counter() - t_start) * 1000,
+                   "routerMs": t_router * 1000, "retrievalMs": t_retrieval * 1000,
+                   "synthesisMs": t_synthesis_total * 1000, "evaluatorMs": t_eval_total * 1000})
     return ChatResponse(
         answer=answer,
         citations=citations_mapped,
