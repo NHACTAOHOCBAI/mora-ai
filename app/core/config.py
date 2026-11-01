@@ -3,12 +3,13 @@ import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    gemini_api_key: Optional[str] = None
-    gemini_model_name: str = "gemini-3.1-flash-lite"
-    gemini_parser_model_list: str = "gemini-2.5-flash,gemini-3.1-flash-lite,gemini-2.5-flash-lite"
-    gemini_evaluator_model_name: str = "gemini-3.1-flash-lite"
-    gemini_evaluator_embeddings_model_name: str = "models/gemini-embedding-2"
-    gemini_temperature: float = 0.0
+    openai_api_key: Optional[str] = None
+    openai_model: str = "gpt-5-mini"
+    openai_parser_model: str = "gpt-5-mini"
+    openai_embedding_model: str = "text-embedding-3-small"
+    openai_timeout: float = 60.0
+    openai_max_retries: int = 2
+    retrieval_enabled: bool = False
 
     # Qdrant Vector Database
     qdrant_url: Optional[str] = None
@@ -18,17 +19,13 @@ class Settings(BaseSettings):
     qdrant_api_key: Optional[str] = None
 
     # Retrieval & Embedding
-    gemini_embedding_model: str = "models/gemini-embedding-2"
     retrieval_top_k: int = 5
     retrieval_dense_limit: int = 20
     retrieval_sparse_limit: int = 20
 
-    # Cấu hình đọc từ file .env của backend hoặc file .env cục bộ của python
+    # Credentials belong to the AI service, independent of process cwd.
     model_config = SettingsConfigDict(
-        env_file=(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "mora-backend", ".env"),
-            ".env"
-        ),
+        env_file=os.path.join(os.path.dirname(__file__), "..", "..", ".env"),
         env_file_encoding="utf-8",
         extra="ignore"
     )

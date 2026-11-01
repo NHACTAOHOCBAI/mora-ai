@@ -10,7 +10,9 @@ from qdrant_client.models import (
     FieldCondition, 
     MatchValue,
     MatchAny,
-    PayloadSchemaType
+    PayloadSchemaType,
+    HasIdCondition,
+    FilterSelector
 )
 from rank_bm25 import BM25Okapi
 
@@ -29,8 +31,8 @@ class VectorStoreManager:
     def __init__(self):
         if getattr(self, "_initialized", False):
             return
-        self.collection_name = "mora_chunks"
-        self.vector_size = 3072  # Kích thước embedding chuẩn của models/gemini-embedding-2
+        self.collection_name = "mora_chunks_openai_v1"
+        self.vector_size = 1536
         
         try:
             if settings.qdrant_url:
@@ -58,13 +60,11 @@ class VectorStoreManager:
             return
         collections = [c.name for c in self.client.get_collections().collections]
         if self.collection_name in collections:
-            # Kiểm tra kích thước vector hiện tại, nếu khác thì xóa tạo lại
+            # Reject incompatible dimensions without changing existing data.
             info = self.client.get_collection(self.collection_name)
             curr_size = info.config.params.vectors.size
             if curr_size != self.vector_size:
-                logger.info(f"Kích thước collection ({curr_size}) khác {self.vector_size}. Đang xóa và tạo lại collection '{self.collection_name}'...")
-                self.client.delete_collection(self.collection_name)
-                collections.remove(self.collection_name)
+                raise ValueError("OpenAI collection has incompatible vector dimensions")
 
         if self.collection_name not in collections:
             logger.info(f"Đang khởi tạo Qdrant Collection '{self.collection_name}' (size={self.vector_size}, distance=Cosine)...")
@@ -102,10 +102,8 @@ class VectorStoreManager:
         points = []
         for idx, (chunk, vector) in enumerate(zip(chunks, embeddings)):
             # Đảm bảo vector đúng kích thước
-            if len(vector) > self.vector_size:
-                vector = vector[:self.vector_size]
-            elif len(vector) < self.vector_size:
-                vector = vector + [0.0] * (self.vector_size - len(vector))
+            if len(vector) != self.vector_size:
+                raise ValueError("Invalid embedding dimensions")
 
             point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{chunk.chunkId}_{space_id}_{document_id}"))
             points.append(PointStruct(
@@ -129,12 +127,24 @@ class VectorStoreManager:
         logger.info(f"[Qdrant] Đang nạp {len(points)} vector points cho Space {space_id}, Document {document_id}...")
         self.client.upsert(
             collection_name=self.collection_name,
-            points=points
+            points=points,
+            wait=True
+        )
+        # Remove obsolete chunks only after all replacement vectors are stored.
+        self.client.delete(
+            collection_name=self.collection_name,
+            points_selector=FilterSelector(filter=Filter(
+                must=[FieldCondition(key="space_id", match=MatchValue(value=space_id)),
+                      FieldCondition(key="document_id", match=MatchValue(value=document_id))],
+                must_not=[HasIdCondition(has_id=[point.id for point in points])]
+            )),
+            wait=True
         )
         logger.info(f"[Qdrant] Nạp {len(points)} points thành công!")
 
         # 2. Cập nhật BM25 In-memory Index cho Space
-        self._update_bm25(space_id, chunks)
+        # Reload the entire space lazily, including documents indexed before restart.
+        self.bm25_store.pop(space_id, None)
 
     def _update_bm25(self, space_id: int, new_chunks: List[SemanticChunk]):
         """Cập nhật chỉ mục BM25 cho một space."""
@@ -167,12 +177,10 @@ class VectorStoreManager:
     ) -> List[Dict[str, Any]]:
         """Tìm kiếm tương đồng Vector trong Qdrant lọc theo space_id và danh sách document_ids tùy chọn."""
         if not self.client:
-            return []
+            raise RuntimeError("Qdrant chưa sẵn sàng.")
 
-        if len(query_vector) > self.vector_size:
-            query_vector = query_vector[:self.vector_size]
-        elif len(query_vector) < self.vector_size:
-            query_vector = query_vector + [0.0] * (self.vector_size - len(query_vector))
+        if len(query_vector) != self.vector_size:
+            raise ValueError("Invalid query embedding dimensions")
 
         must_conditions = [
             FieldCondition(
@@ -223,6 +231,27 @@ class VectorStoreManager:
         document_ids: Optional[List[int]] = None
     ) -> List[Dict[str, Any]]:
         """Tìm kiếm từ khóa chính xác BM25 lọc theo space_id và danh sách document_ids tùy chọn."""
+        if space_id not in self.bm25_store and self.client:
+            chunks = []
+            offset = None
+            while True:
+                points, offset = self.client.scroll(
+                    collection_name=self.collection_name,
+                    scroll_filter=Filter(must=[FieldCondition(key="space_id", match=MatchValue(value=space_id))]),
+                    limit=256, offset=offset, with_vectors=False
+                )
+                for point in points:
+                    p = point.payload
+                    chunks.append(SemanticChunk(
+                        chunkId=p["chunk_id"], documentId=p["document_id"], spaceId=space_id,
+                        documentName=p.get("document_name"), pageNumber=p["page_number"],
+                        sectionPath=p.get("section_path", ""), chunkType=p.get("chunk_type", "TEXT"),
+                        content=p.get("content", ""), enrichedContent=p.get("enriched_content", ""),
+                        tokenCount=p.get("token_count", 0)
+                    ))
+                if offset is None:
+                    break
+            self._update_bm25(space_id, chunks)
         if space_id not in self.bm25_store or not self.bm25_store[space_id]["bm25"]:
             return []
 

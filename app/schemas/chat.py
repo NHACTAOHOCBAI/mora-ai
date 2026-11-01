@@ -17,10 +17,6 @@ class ChatRequest(BaseModel):
     context: Optional[List[ChatContextItem]] = []
     history: List[ChatHistoryItem]
     chat_summary: Optional[str] = None
-    api_key: Optional[str] = None
-    chat_model: Optional[str] = None
-    router_model: Optional[str] = None
-    evaluator_model: Optional[str] = None
     space_id: Optional[int] = None
     spaceId: Optional[int] = None
     document_id: Optional[int] = None
@@ -43,16 +39,6 @@ class ChatResponse(BaseModel):
 class ChatSummarizeRequest(BaseModel):
     history: List[ChatHistoryItem]
     previous_summary: Optional[str] = None
-    api_key: Optional[str] = None
-    summarizer_model: Optional[str] = None
 
 class ChatSummarizeResponse(BaseModel):
     summary: str
-
-class ChatValidateKeyRequest(BaseModel):
-    api_key: str
-    model_name: Optional[str] = "gemini-2.5-flash"
-
-class ChatValidateKeyResponse(BaseModel):
-    valid: bool
-    message: str

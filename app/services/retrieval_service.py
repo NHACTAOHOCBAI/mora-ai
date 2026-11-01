@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional
 from loguru import logger
-from google import genai
+from openai import OpenAI
+from app.services.openai_service import embed
 from app.core.config import settings
 from app.services.vector_service import vector_store
 
@@ -20,8 +21,8 @@ def get_ranker():
 
 
 def rrf_merge(
-    dense_results: List[Dict[str, Any]], 
-    sparse_results: List[Dict[str, Any]], 
+    dense_results: List[Dict[str, Any]],
+    sparse_results: List[Dict[str, Any]],
     k: int = 60,
     top_n: int = 20
 ) -> List[Dict[str, Any]]:
@@ -50,46 +51,40 @@ def rrf_merge(
     return merged
 
 def hybrid_retrieve(
-    query: str, 
-    space_id: int, 
-    gemini_client: genai.Client, 
+    query: str,
+    space_id: int,
+    openai_client: OpenAI,
     top_k: int = None,
     document_ids: Optional[List[int]] = None
 ) -> List[Dict[str, Any]]:
     """
     Quy trình Two-Stage Hybrid Search & Re-ranking:
-    1. Tạo Dense Vector cho câu hỏi qua Gemini Embedding Model.
+    1. Tạo Dense Vector cho câu hỏi qua OpenAI Embedding Model.
     2. Tìm kiếm đồng thời Dense (Qdrant) và Sparse (BM25), có thể lọc theo document_ids.
     3. Hợp nhất bằng Reciprocal Rank Fusion (RRF).
     4. Re-rank bằng FlashRank để chọn ra Top-K chunks tối ưu nhất.
     """
+    if not settings.retrieval_enabled:
+        raise RuntimeError("Chỉ mục OpenAI chưa sẵn sàng. Vui lòng thử lại sau.")
     target_top_k = top_k or settings.retrieval_top_k
     logger.info(f"[Retrieval Agent] Bắt đầu Two-Stage Hybrid Search cho Space {space_id} (docs: {document_ids}) với câu hỏi: '{query}'")
 
     # 1. Tạo Query Vector
-    try:
-        embed_resp = gemini_client.models.embed_content(
-            model=settings.gemini_embedding_model,
-            contents=query
-        )
-        query_vector = embed_resp.embeddings[0].values if embed_resp.embeddings else []
-    except Exception as e:
-        logger.error(f"[Retrieval Agent] Lỗi khi tạo Query Embedding: {e}", exc_info=True)
-        query_vector = []
+    query_vector = embed(openai_client, [query])[0]
 
     # 2. Dense Search (Qdrant) & Sparse Search (BM25)
     dense_hits = []
     if query_vector:
         dense_hits = vector_store.search_dense(
-            space_id=space_id, 
-            query_vector=query_vector, 
+            space_id=space_id,
+            query_vector=query_vector,
             limit=settings.retrieval_dense_limit,
             document_ids=document_ids
         )
 
     sparse_hits = vector_store.search_sparse(
-        space_id=space_id, 
-        query=query, 
+        space_id=space_id,
+        query=query,
         limit=settings.retrieval_sparse_limit,
         document_ids=document_ids
     )
@@ -99,7 +94,7 @@ def hybrid_retrieve(
     # 3. RRF Fusion
     merged_candidates = rrf_merge(dense_hits, sparse_hits, top_n=20)
     if not merged_candidates:
-        logger.warn(f"[Retrieval Agent] Không tìm thấy chunk nào trong Vector Store cho Space {space_id}.")
+        logger.warning(f"[Retrieval Agent] Không tìm thấy chunk nào trong Vector Store cho Space {space_id}.")
         return []
 
     # 4. Stage 2: Re-ranking với FlashRank

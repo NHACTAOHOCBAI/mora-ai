@@ -1,10 +1,9 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 from loguru import logger
-from google import genai
+from app.services.openai_service import get_client, embed
 
-from app.core.config import settings
 from app.services.chunking_service import extract_semantic_chunks_from_pages
 from app.services.vector_service import vector_store
 
@@ -19,16 +18,15 @@ class IndexRequest(BaseModel):
     spaceId: int
     documentName: str
     pages: List[PageItem]
-    apiKey: Optional[str] = None
 
 @router.post("/index")
 def index_endpoint(request: IndexRequest):
     logger.info(f"Bắt đầu lập chỉ mục Vector & BM25 cho Document '{request.documentName}' (ID: {request.documentId}, Space: {request.spaceId}, Pages: {len(request.pages)})")
     
-    api_key = request.apiKey or settings.gemini_api_key
-    if not api_key:
-        logger.error("Không tìm thấy Gemini API Key để tạo Embeddings.")
-        raise HTTPException(status_code=400, detail="Cần cấu hình Gemini API Key để xử lý tài liệu.")
+    try:
+        client = get_client()
+    except Exception:
+        raise HTTPException(status_code=503, detail="Dịch vụ AI chưa sẵn sàng.") from None
 
     # 1. Phân đoạn Semantic Chunks theo AST
     pages_dict = [{"pageNumber": p.pageNumber, "text": p.text} for p in request.pages]
@@ -40,38 +38,14 @@ def index_endpoint(request: IndexRequest):
     )
 
     if not chunks:
-        logger.warn(f"Không có chunk nào được trích xuất từ tài liệu ID: {request.documentId}")
-        return {"status": "success", "message": "No text content found to index", "chunksCount": 0}
+        raise HTTPException(status_code=422, detail="Tài liệu không có nội dung để lập chỉ mục.")
 
-    # 2. Tạo Vector Embeddings qua Google GenAI SDK với cơ chế Retry & Rate-limit
-    logger.info(f"Đang tạo Embeddings cho {len(chunks)} chunks sử dụng model '{settings.gemini_embedding_model}'...")
-    client = genai.Client(api_key=api_key)
     embeddings = []
-
-    import time
     try:
-        for idx, chunk in enumerate(chunks):
-            for attempt in range(5):
-                try:
-                    resp = client.models.embed_content(
-                        model=settings.gemini_embedding_model,
-                        contents=chunk.enrichedContent
-                    )
-                    val = resp.embeddings[0].values if resp.embeddings else []
-                    embeddings.append(val)
-                    time.sleep(0.05)
-                    break
-                except Exception as api_err:
-                    if "429" in str(api_err) or "RESOURCE_EXHAUSTED" in str(api_err):
-                        logger.warning(f"Rate limit (429) khi tạo embedding chunk {idx+1}/{len(chunks)}. Đang chờ 5s (thử lại lần {attempt+1})...")
-                        time.sleep(5)
-                    else:
-                        raise api_err
-
-        logger.info(f"Tạo thành công {len(embeddings)} vector embeddings!")
-    except Exception as e:
-        logger.error(f"Lỗi trong quá trình tạo Gemini Embeddings: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Không thể tạo chỉ mục cho tài liệu. Vui lòng thử lại sau.")
+        for offset in range(0, len(chunks), 32):
+            embeddings.extend(embed(client, [c.enrichedContent for c in chunks[offset:offset + 32]]))
+    except Exception:
+        raise HTTPException(status_code=503, detail="Không thể tạo chỉ mục tài liệu lúc này.") from None
 
     # 3. Nạp vào Qdrant Container và BM25 Index
     try:

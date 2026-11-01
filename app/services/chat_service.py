@@ -3,8 +3,7 @@ import time
 from typing import List, Tuple, Optional
 from pydantic import BaseModel
 from loguru import logger
-from google import genai
-from google.genai import types
+from app.services.openai_service import get_client, generate, AI_ERROR
 
 from app.core.config import settings
 from app.schemas.chat import ChatRequest, ChatResponse, Citation, ChatSummarizeRequest, ChatSummarizeResponse
@@ -32,13 +31,11 @@ class EvaluationSchema(BaseModel):
     score: float  # 0.0 to 1.0
 
 class MultiAgentOrchestrator:
-    def __init__(self, api_key: str, chat_model: str = None, router_model: str = None, evaluator_model: str = None):
-        if not api_key:
-            raise ValueError("Gemini API Key is required.")
-        self.client = genai.Client(api_key=api_key)
-        self.chat_model = chat_model or settings.gemini_model_name
-        self.router_model = router_model or settings.gemini_model_name
-        self.evaluator_model = evaluator_model or settings.gemini_evaluator_model_name
+    def __init__(self):
+        self.client = get_client()
+        self.chat_model = settings.openai_model
+        self.router_model = settings.openai_model
+        self.evaluator_model = settings.openai_model
 
     def route_agent(self, question: str, chat_summary: str, history: List[dict]) -> str:
         logger.info(f"[Router Agent] Classifying intent using model '{self.router_model}' for: '{question}'")
@@ -57,23 +54,13 @@ class MultiAgentOrchestrator:
             f"--- Câu hỏi mới ---\n{question}\n"
         )
         try:
-            response = self.client.models.generate_content(
-                model=self.router_model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    response_mime_type="application/json",
-                    response_schema=RouteSchema,
-                    temperature=0.0
-                )
-            )
-            result = json.loads(response.text)
+            response = generate(self.client, self.router_model, prompt, system_instruction, RouteSchema)
+            result = json.loads(response)
             intent = result.get("intent", "GENERAL").upper()
             logger.info(f"[Router Agent] Decision: {intent} (Reason: {result.get('reason')})")
             return intent
-        except Exception as e:
-            logger.error(f"[Router Agent] Error during routing with model {self.router_model}: {e}", exc_info=True)
-            return "GENERAL"
+        except Exception:
+            raise RuntimeError(AI_ERROR) from None
 
     def retrieval_agent(
         self, 
@@ -83,13 +70,13 @@ class MultiAgentOrchestrator:
         document_ids: Optional[List[int]] = None
     ) -> List[dict]:
         logger.info(f"[Retrieval Agent] Bắt đầu xử lý truy vấn cho Space ID: {space_id}, Document IDs: {document_ids}")
-        if space_id:
+        if space_id and settings.retrieval_enabled and document_ids != []:
             try:
                 from app.services.retrieval_service import hybrid_retrieve
                 retrieved_chunks = hybrid_retrieve(
                     query=question,
                     space_id=space_id,
-                    gemini_client=self.client,
+                    openai_client=self.client,
                     document_ids=document_ids
                 )
                 if retrieved_chunks:
@@ -105,8 +92,8 @@ class MultiAgentOrchestrator:
                         })
                     logger.info(f"[Retrieval Agent] Hybrid Search thành công! Chọn {len(mapped_context)} chunks tinh hoa cung cấp cho Synthesis Agent.")
                     return mapped_context
-            except Exception as e:
-                logger.error(f"[Retrieval Agent] Lỗi trong quá trình Hybrid Search: {e}", exc_info=True)
+            except Exception:
+                raise RuntimeError(AI_ERROR) from None
 
         logger.info(f"[Retrieval Agent] Sử dụng raw_context đầu vào. Tổng số: {len(raw_context) if raw_context else 0}")
         return raw_context or []
@@ -133,18 +120,10 @@ class MultiAgentOrchestrator:
             f"--- CÂU HỎI MỚI ---\nNgười dùng: {question}\n"
         )
         try:
-            response = self.client.models.generate_content(
-                model=self.chat_model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    temperature=0.7
-                )
-            )
-            return response.text, system_instruction + "\n\n" + prompt
-        except Exception as e:
-            logger.error(f"[General Chat Agent] Error: {e}", exc_info=True)
-            return "Đã xảy ra lỗi khi tạo phản hồi. Vui lòng kiểm tra lại API Key hoặc hạn mức Model.", prompt
+            response = generate(self.client, self.chat_model, prompt, system_instruction)
+            return response, system_instruction + "\n\n" + prompt
+        except Exception:
+            raise RuntimeError(AI_ERROR) from None
 
     def synthesis_agent(self, question: str, context: List[dict], chat_summary: str, history: List[dict]) -> dict:
         logger.info(f"[Synthesis Agent] Synthesizing answer using model '{self.chat_model}' with {len(context)} chunks.")
@@ -179,27 +158,12 @@ class MultiAgentOrchestrator:
             f"--- CÂU HỎI MỚI ---\nNgười dùng: {question}\n"
         )
         try:
-            response = self.client.models.generate_content(
-                model=self.chat_model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    response_mime_type="application/json",
-                    response_schema=RAGResponseSchema,
-                    temperature=0.0
-                )
-            )
-            result = json.loads(response.text)
+            response = generate(self.client, self.chat_model, prompt, system_instruction, RAGResponseSchema)
+            result = json.loads(response)
             result["promptSent"] = system_instruction + "\n\n" + prompt
             return result
-        except Exception as e:
-            logger.error(f"[Synthesis Agent] Error with model {self.chat_model}: {e}", exc_info=True)
-            return {
-                "answer": "Không thể tổng hợp câu trả lời dựa trên tài liệu. Vui lòng kiểm tra lại API Key hoặc hạn mức Model.",
-                "citations": [],
-                "condensedQuestion": question,
-                "promptSent": prompt
-            }
+        except Exception:
+            raise RuntimeError(AI_ERROR) from None
 
     def evaluator_agent(self, answer: str, context: List[dict]) -> Tuple[bool, float]:
         logger.info(f"[Evaluator Agent] Performing QC using model '{self.evaluator_model}'.")
@@ -220,44 +184,22 @@ class MultiAgentOrchestrator:
             f"--- Câu trả lời được sinh ra ---\n{answer}\n"
         )
         try:
-            response = self.client.models.generate_content(
-                model=self.evaluator_model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    response_mime_type="application/json",
-                    response_schema=EvaluationSchema,
-                    temperature=0.0
-                )
-            )
-            result = json.loads(response.text)
+            response = generate(self.client, self.evaluator_model, prompt, system_instruction, EvaluationSchema)
+            result = json.loads(response)
             is_faithful = result.get("is_faithful", True)
             score = result.get("score", 1.0)
             logger.info(f"[Evaluator Agent] Quality score: {score} (Is Faithful: {is_faithful})")
             return is_faithful, score
-        except Exception as e:
-            logger.error(f"[Evaluator Agent] Evaluation error with model {self.evaluator_model}: {e}", exc_info=True)
-            return True, 1.0
+        except Exception:
+            raise RuntimeError(AI_ERROR) from None
 
 
 def generate_chat_response(request: ChatRequest) -> ChatResponse:
-    if not request.api_key:
-        logger.error("Yêu cầu chat bị từ chối do thiếu Gemini API Key.")
-        raise ValueError("Vui lòng cấu hình Gemini API Key trước khi sử dụng.")
-
     t_start = time.time()
-    logger.info(f"Bắt đầu xử lý câu hỏi: {request.question}")
-    
-    orchestrator = MultiAgentOrchestrator(
-        api_key=request.api_key,
-        chat_model=request.chat_model,
-        router_model=request.router_model,
-        evaluator_model=request.evaluator_model
-    )
-    
-    # Chuẩn bị dữ liệu cho các Agent
+    orchestrator = MultiAgentOrchestrator()
+
     space_id = request.space_id or request.spaceId
-    document_ids = request.document_ids or request.documentIds
+    document_ids = request.document_ids if request.document_ids is not None else request.documentIds
     raw_context = [
         {
             "pageNumber": ctx.pageNumber,
@@ -302,7 +244,7 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
         t_retrieval = time.time() - t_retrieval_start
         
         if not filtered_context:
-            logger.warn(f"[Orchestrator] Không tìm thấy ngữ cảnh nào cho câu hỏi RAG: '{request.question}'. Sẽ chuyển sang GENERAL fallback.")
+            logger.warning(f"[Orchestrator] Không tìm thấy ngữ cảnh nào cho câu hỏi RAG: '{request.question}'. Sẽ chuyển sang GENERAL fallback.")
         else:
             max_retries = 2
             for attempt in range(max_retries):
@@ -405,15 +347,9 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
     )
 
 def generate_chat_summary(request: ChatSummarizeRequest) -> ChatSummarizeResponse:
-    if not request.api_key:
-        logger.warning("Bỏ qua tóm tắt hội thoại do thiếu API Key.")
-        return ChatSummarizeResponse(summary=request.previous_summary if request.previous_summary else "")
+    client = get_client()
+    model_name = settings.openai_model
 
-    logger.info("Bắt đầu tóm tắt lịch sử hội thoại...")
-    client = genai.Client(api_key=request.api_key)
-    model_name = request.summarizer_model or settings.gemini_model_name
-
-    # Định dạng lịch sử hội thoại thành chuỗi văn bản
     history_str = ""
     for h in request.history:
         role = "Người dùng" if h.sender == "user" else "Trợ lý AI"
@@ -444,37 +380,9 @@ def generate_chat_summary(request: ChatSummarizeRequest) -> ChatSummarizeRespons
         prompt += history_str
 
     try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0.3
-            )
-        )
-        summary = response.text.strip()
+        response = generate(client, model_name, prompt, system_instruction)
+        summary = response.strip()
         logger.info(f"Tóm tắt hội thoại thành công: {summary}")
         return ChatSummarizeResponse(summary=summary)
-    except Exception as e:
-        logger.error(f"Lỗi khi tóm tắt hội thoại bằng Gemini: {e}", exc_info=True)
-        return ChatSummarizeResponse(summary=request.previous_summary if request.previous_summary else "Hội thoại học tập về tài liệu.")
-
-def validate_gemini_key(api_key: str, model_name: str = "gemini-2.5-flash") -> Tuple[bool, str]:
-    if not api_key or not api_key.strip():
-        return False, "API Key không được để trống."
-    try:
-        client = genai.Client(api_key=api_key.strip())
-        response = client.models.generate_content(
-            model=model_name or "gemini-2.5-flash",
-            contents="ping",
-            config=types.GenerateContentConfig(
-                max_output_tokens=5,
-                temperature=0.0
-            )
-        )
-        return True, "API Key hợp lệ và kết nối Google AI Studio thành công."
-    except Exception as e:
-        error_msg = str(e)
-        logger.warning(f"Key validation failed: {error_msg}")
-        return False, f"API Key không hợp lệ hoặc đã hết hạn mức: {error_msg}"
-
+    except Exception:
+        raise RuntimeError(AI_ERROR) from None
