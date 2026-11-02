@@ -1,5 +1,32 @@
 # Benchmark RAG v1
 
+## Giải thích điểm từng câu
+
+Các run mới lưu `metricDetailsVersion=1` trong cấu hình đóng băng. Mỗi metric
+trong `metricsJson` có thêm `details`; điểm, trạng thái, bảng tổng hợp và CSV
+giữ nguyên ý nghĩa. JSON export chứa cả chi tiết. Không cần migration database.
+
+Mở một câu/lần lặp ở trang admin để xem:
+
+- Context Precision: thứ tự context, nhãn hữu ích và lý do judge, tổng tích lũy,
+  precision ở từng vị trí và từng đóng góp vào Average Precision. Mẫu số dùng
+  epsilon `1e-10` đúng như Ragas.
+- Faithfulness: phát biểu đã tách, phán quyết được hỗ trợ và lý do; tỷ lệ dùng
+  đúng số phát biểu được kiểm tra trong đầu ra NLI của Ragas.
+- Answer Relevance: câu hỏi tạo ngược, cờ mơ hồ, câu rỗng bị bỏ, tích vô hướng,
+  độ dài hai vector, cosine từng cặp, trung bình và hệ số mơ hồ. Vector đầy đủ
+  chỉ tồn tại trong bộ nhớ, không lưu hoặc xuất ra. Không cắt cosine âm về 0.
+- Citation Accuracy: nguồn chuẩn và các cặp tài liệu–trang đã loại trùng,
+  cặp đúng/sai và tử số/mẫu số. Document ID không xác định vẫn tính sai.
+- Latency: các thời gian thành phần và chênh lệch còn lại so với tổng đo được;
+  không bao gồm thời gian judge. Thời gian chấm mỗi metric được hiển thị riêng.
+
+Các dữ liệu này được ghi từ chính các lời gọi Ragas hiện có, không gọi AI thêm
+để tạo lời giải thích. Lý do judge giữ nguyên ngôn ngữ đầu ra. Khi lỗi/timeout,
+chỉ giữ phần dữ liệu đã quan sát và đánh dấu phép tính chưa hoàn tất.
+Run cũ không bị chấm lại; giao diện giữ điểm gốc và thông báo thiếu chi tiết.
+Các số hiển thị được làm tròn, điểm vẫn dùng giá trị đầy đủ do Ragas trả về.
+
 Benchmark đo pipeline đang dùng trong chat, gồm Router, Hybrid (dense + BM25), RRF,
 FlashRank, Synthesis, Evaluator và các nhánh GENERAL/fallback. Không ép router vào
 RAG và không đưa ground truth vào bước sinh câu trả lời.

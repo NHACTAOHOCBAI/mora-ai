@@ -116,6 +116,7 @@ def configuration():
         "judgeModel": settings.benchmark_judge_model,
         "judgeEmbeddingModel": settings.benchmark_judge_embedding_model,
         "judgeAdapter": "openai-responses-v1",
+        "metricDetailsVersion": 1,
         "judgeTimeout": settings.benchmark_judge_timeout,
         "judgeMaxRetries": settings.benchmark_judge_max_retries,
         "embeddingModel": settings.openai_embedding_model,
@@ -165,15 +166,16 @@ def metric_value(value=None, status="ok", reason=None):
 async def score(request: ScoreSample):
     verify_config(request.config)
     from app.services.benchmark_judge import ResponsesJudge
-    from ragas.embeddings import OpenAIEmbeddings
+    from app.services.benchmark_details import RecordingJudge, RecordingEmbeddings, details_for
     from ragas.metrics.collections import ContextPrecision, Faithfulness, AnswerRelevancy
     client = AsyncOpenAI(api_key=settings.benchmark_judge_api_key or settings.openai_api_key,
                          timeout=settings.benchmark_judge_timeout,
                          max_retries=settings.benchmark_judge_max_retries)
     try:
-        llm = ResponsesJudge(client, request.config["judgeModel"])
-        embeddings = OpenAIEmbeddings(client=client, model=request.config["judgeEmbeddingModel"])
-        contexts = [c["text"] for c in request.trace.get("pipeline", {}).get("contexts", [])]
+        llm = RecordingJudge(ResponsesJudge(client, request.config["judgeModel"]))
+        embeddings = RecordingEmbeddings(client=client, model=request.config["judgeEmbeddingModel"])
+        context_items = request.trace.get("pipeline", {}).get("contexts", [])
+        contexts = [c["text"] for c in context_items]
         answer = request.trace["response"]["answer"]
         output = {}
         calls = {
@@ -185,9 +187,15 @@ async def score(request: ScoreSample):
                 user_input=request.question, response=answer),
         }
         for name, call in calls.items():
+            llm.outputs.clear()
+            embeddings.original = None
+            embeddings.generated = []
+            started = time.perf_counter()
             if not contexts and name != "answerRelevance":
                 output[name] = metric_value(0.0) if name == "contextPrecision" else metric_value(
                     status="not_applicable", reason="No context supplied to RAG synthesis")
+                output[name]["details"] = details_for(name, [], embeddings, context_items, True)
+                output[name]["details"]["durationMs"] = 0
                 continue
             try:
                 started = time.perf_counter()
@@ -204,6 +212,9 @@ async def score(request: ScoreSample):
                 output[name] = metric_value(status="error", reason=summary.get("reason", summary["type"]))
                 if "httpStatus" in summary:
                     output[name]["httpStatus"] = summary["httpStatus"]
+            output[name]["details"] = details_for(name, llm.outputs, embeddings, context_items,
+                                                  output[name]["status"] == "ok")
+            output[name]["details"]["durationMs"] = (time.perf_counter() - started) * 1000
         return output
     finally:
         await client.close()

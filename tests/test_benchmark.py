@@ -188,8 +188,10 @@ class JudgeTests(unittest.IsolatedAsyncioTestCase):
         from app.services.benchmark_judge import ResponsesJudge
         from ragas.embeddings import OpenAIEmbeddings
         from app.core.config import settings
+        calls = []
         async def generate(self, prompt, response_model):
             name = response_model.__name__
+            calls.append(name)
             payload = {
                 "ContextPrecisionOutput": {"reason": "supported", "verdict": 1},
                 "StatementGeneratorOutput": {"statements": ["answer"]},
@@ -203,6 +205,14 @@ class JudgeTests(unittest.IsolatedAsyncioTestCase):
         for metric in result.values():
             self.assertEqual(metric["status"], "ok", metric)
             self.assertAlmostEqual(metric["value"], 1.)
+            self.assertEqual(metric["details"]["version"], 1)
+            self.assertTrue(metric["details"]["complete"])
+            self.assertGreaterEqual(metric["details"]["durationMs"], 0)
+        self.assertEqual(len(calls), 6)  # 1 context + 2 faithfulness + 3 reverse questions.
+        self.assertEqual(result["contextPrecision"]["details"]["rows"][0]["reason"], "supported")
+        self.assertEqual(result["faithfulness"]["details"]["supportedCount"], 1)
+        self.assertEqual(result["answerRelevance"]["details"]["usedCount"], 3)
+        self.assertEqual(result["answerRelevance"]["details"]["rows"][0]["cosine"], 1.)
 
     async def test_empty_context_and_judge_failure_are_explicit(self):
         from app.services.benchmark_judge import ResponsesJudge
