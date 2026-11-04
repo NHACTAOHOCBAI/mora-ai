@@ -26,6 +26,11 @@ class OpenAiMigrationTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
 
+    def test_liveness_health_endpoint_is_public_and_lightweight(self):
+        response = self.client.get("/health")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok"})
+
     def test_missing_server_key_is_service_error_and_settings_endpoints_are_removed(self):
         with patch.object(settings, "openai_api_key", None):
             response = self.client.post("/api/chat", json={"question": "Xin chào", "history": []})

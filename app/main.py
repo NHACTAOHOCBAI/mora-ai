@@ -13,6 +13,11 @@ app = FastAPI(
 # Đăng ký router tổng hợp với prefix /api để giữ nguyên tương thích URL với backend
 app.include_router(api_router, prefix="/api")
 
+@app.get("/health", tags=["infrastructure"])
+def health():
+    """Lightweight liveness probe for Docker, ECS, and load balancers."""
+    return {"status": "ok"}
+
 @app.get("/api/hello")
 def hello():
     return {"message": "Hello from Mora AI"}

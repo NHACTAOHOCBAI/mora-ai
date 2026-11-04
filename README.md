@@ -178,6 +178,18 @@ curl http://localhost:8000/api/hello
 
 ```bash
 docker build -t mora-ai .
+
+## Health check và Docker Compose
+
+`GET /health` là liveness endpoint công khai cho Docker/ECS; nó không gọi OpenAI
+hoặc Qdrant. Để chạy AI cùng toàn bộ Mora, dùng repository
+[`../mora-infra`](../mora-infra/README.md):
+
+```bash
+cd ../mora-infra
+cp .env.example .env
+docker compose --env-file .env up --build
+```
 docker run --env-file .env -p 8000:8000 mora-ai
 ```
 
