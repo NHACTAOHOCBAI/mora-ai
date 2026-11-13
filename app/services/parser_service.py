@@ -26,14 +26,28 @@ def extract_page(client, page_pdf_bytes, page_num):
 
 
 def parse_pdf_layout_and_diagrams(pdf_bytes):
-    client = get_client()
+    """Read text PDFs locally first; use OpenAI only for pages with no extractable text.
+
+    This keeps uploads available if the optional vision/enrichment service is
+    unavailable, while still supporting scanned PDFs when credentials exist.
+    """
     reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
     pages = []
     for page_num, page in enumerate(reader.pages, start=1):
+        local_text = (page.extract_text() or "").strip()
+        if local_text:
+            pages.append({"pageNumber": page_num, "text": local_text})
+            continue
+
+        # A scanned/image-only page needs the AI parser. Instantiate its client
+        # lazily so a bad key does not prevent normal text-PDF uploads.
+        client = get_client()
         writer = pypdf.PdfWriter()
         writer.add_page(page)
         stream = io.BytesIO()
         writer.write(stream)
         pages.append({"pageNumber": page_num,
                       "text": extract_page(client, stream.getvalue(), page_num)})
+    if not pages:
+        raise ValueError("PDF không có trang để xử lý")
     return pages

@@ -16,6 +16,6 @@ def parse_pdf_endpoint(
         content = file.file.read()
         parsed_pages = parse_pdf_layout_and_diagrams(content)
         return {"status": "success", "pages": parsed_pages}
-    except Exception:
-        logger.error("PDF parsing failed")
+    except Exception as exc:
+        logger.exception("PDF parsing failed: {}", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Không thể xử lý tài liệu PDF. Vui lòng thử lại sau.")

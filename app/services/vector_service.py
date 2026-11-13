@@ -287,4 +287,29 @@ class VectorStoreManager:
                     break
         return results
 
+    def sample_chunks(self, space_id: int, document_ids: List[int], per_document: int = 8) -> List[Dict[str, Any]]:
+        """Lấy mẫu bao phủ từng tài liệu, giới hạn context cho tác vụ tạo bài ôn."""
+        if not self.client:
+            raise RuntimeError("Qdrant Client chưa sẵn sàng.")
+        points, _ = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=Filter(must=[
+                FieldCondition(key="space_id", match=MatchValue(value=space_id)),
+                FieldCondition(key="document_id", match=MatchAny(any=document_ids))
+            ]), limit=512, with_vectors=False
+        )
+        grouped: Dict[int, List[Any]] = {doc_id: [] for doc_id in document_ids}
+        for point in points:
+            doc_id = point.payload.get("document_id")
+            if doc_id in grouped:
+                grouped[doc_id].append(point.payload)
+        sampled = []
+        for doc_id in document_ids:
+            items = grouped.get(doc_id, [])
+            if not items: continue
+            step = max(1, len(items) // per_document)
+            for item in items[::step][:per_document]:
+                sampled.append({"documentId": item.get("document_id"), "documentName": item.get("document_name"), "pageNumber": item.get("page_number"), "content": item.get("content"), "enrichedContent": item.get("enriched_content")})
+        return sampled
+
 vector_store = VectorStoreManager()
