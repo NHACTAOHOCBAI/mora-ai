@@ -21,7 +21,8 @@ Frontend không gọi AI Service trực tiếp. Backend chịu trách nhiệm x�
 - Phân tích PDF theo trang, hỗ trợ nội dung và bố cục/diagram qua OpenAI.
 - Semantic chunking, tạo embedding và index tài liệu vào Qdrant.
 - Hybrid retrieval (dense + BM25), rerank bằng FlashRank và trả citation cho chat.
-- Chat và tóm tắt chat.
+- Chat, tóm tắt chat và đánh giá faithfulness.
+- Tạo flashcard/quiz phục vụ bộ ôn tập trong Space.
 
 ```text
 app/
@@ -106,6 +107,8 @@ Service chạy dưới prefix `/api`:
 | `POST /api/chat/summarize` | Tóm tắt lịch sử chat. |
 | `POST /api/index` | Chunk, embed và index trang tài liệu vào Qdrant. |
 | `POST /api/parse` | Phân tích tệp PDF. |
+| `POST /api/study/generate` | Sinh flashcard và câu hỏi quiz từ tài liệu đã chọn. |
+| `GET /health` | Liveness endpoint công khai, không gọi OpenAI/Qdrant. |
 
 Tài liệu tương tác theo schema hiện hành có tại `http://localhost:8000/docs`; ReDoc có tại `http://localhost:8000/redoc`.
 
@@ -141,6 +144,8 @@ Key không nằm trong frontend, backend Java hoặc request HTTP giữa các se
 Giữ cấu hình Qdrant (`QDRANT_HOST`, `QDRANT_PORT` hoặc `QDRANT_URL`, `QDRANT_API_KEY`) tại service này.
 Không commit `.env`. Giữ AI Service trong mạng nội bộ; frontend chỉ gọi backend có xác thực.
 
+Có thể điều chỉnh `RETRIEVAL_TOP_K`, `RETRIEVAL_DENSE_LIMIT` và `RETRIEVAL_SPARSE_LIMIT` khi cần tinh chỉnh retrieval.
+
 ## Chuyển chỉ mục sang OpenAI
 
 1. Tạm ngừng nhận chat/tải tài liệu trong thời gian bảo trì. Khởi động AI Service với key hợp lệ và `RETRIEVAL_ENABLED=false`.
@@ -171,13 +176,15 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 Kiểm tra nhanh:
 
 ```bash
-curl http://localhost:8000/api/hello
+curl http://localhost:8000/health
 ```
 
 ## Chạy bằng Docker
 
 ```bash
 docker build -t mora-ai .
+docker run --env-file .env -p 8000:8000 mora-ai
+```
 
 ## Health check và Docker Compose
 
@@ -190,11 +197,15 @@ cd ../mora-infra
 cp .env.example .env
 docker compose --env-file .env up --build
 ```
-docker run --env-file .env -p 8000:8000 mora-ai
-```
 
 Khi chạy container, đặt `QDRANT_URL` hoặc `QDRANT_HOST` phù hợp với mạng Docker; `localhost` bên trong container không trỏ về máy host.
 
 ## Tích hợp Backend
 
 Backend mặc định gọi service tại `http://localhost:8000`; thay đổi bằng `AI_SERVICE_URL` trong `.env` của Backend. Hướng dẫn chạy toàn bộ stack có tại [`../mora-backend/README.md`](../mora-backend/README.md).
+
+## Repository liên quan
+
+- [Mora Frontend](../mora-frontend/README.md): web client, Space và khu quản trị.
+- [Mora Backend](../mora-backend/README.md): REST API, xác thực, WebSocket và điều phối dữ liệu.
+- [Mora Infra](../mora-infra/README.md): chạy toàn bộ stack bằng Docker Compose.
