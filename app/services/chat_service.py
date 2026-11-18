@@ -18,7 +18,6 @@ class CitationSchema(BaseModel):
 class RAGResponseSchema(BaseModel):
     answer: str
     citations: List[CitationSchema]
-    condensedQuestion: str
     hasSufficientInfo: bool
 
 class RouteSchema(BaseModel):
@@ -98,7 +97,7 @@ class MultiAgentOrchestrator:
         logger.info(f"[Retrieval Agent] Sử dụng raw_context đầu vào. Tổng số: {len(raw_context) if raw_context else 0}")
         return raw_context or []
 
-    def general_chat_agent(self, question: str, chat_summary: str, history: List[dict]) -> Tuple[str, str]:
+    def general_chat_agent(self, question: str, chat_summary: str, history: List[dict]) -> str:
         logger.info(f"[General Chat Agent] Answering query using model '{self.chat_model}': '{question}'")
         system_instruction = (
             "Bạn là Trợ lý Học tập AI tích hợp trong hệ thống Mora.\n"
@@ -121,7 +120,7 @@ class MultiAgentOrchestrator:
         )
         try:
             response = generate(self.client, self.chat_model, prompt, system_instruction)
-            return response, system_instruction + "\n\n" + prompt
+            return response
         except Exception:
             raise RuntimeError(AI_ERROR) from None
 
@@ -159,9 +158,7 @@ class MultiAgentOrchestrator:
         )
         try:
             response = generate(self.client, self.chat_model, prompt, system_instruction, RAGResponseSchema)
-            result = json.loads(response)
-            result["promptSent"] = system_instruction + "\n\n" + prompt
-            return result
+            return json.loads(response)
         except Exception:
             raise RuntimeError(AI_ERROR) from None
 
@@ -223,8 +220,6 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
     
     answer = ""
     citations = []
-    condensed_question = request.question
-    prompt_sent = ""
     t_retrieval = 0.0
     t_synthesis_total = 0.0
     t_eval_total = 0.0
@@ -263,8 +258,6 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
                 
                 answer = rag_result.get("answer", "")
                 citations = rag_result.get("citations", [])
-                condensed_question = rag_result.get("condensedQuestion", request.question)
-                prompt_sent = rag_result.get("promptSent", "")
                 
                 # Evaluator Agent kiểm QC câu trả lời
                 t_eval_start = time.time()
@@ -283,7 +276,7 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
     if intent == "GENERAL" or (intent == "RAG" and not is_rag_success):
         logger.info("[Orchestrator] Executing General Chat Agent (either intended or via RAG Fallback)")
         t_synth_start = time.time()
-        general_answer, prompt_sent = orchestrator.general_chat_agent(request.question, request.chat_summary or "", history)
+        general_answer = orchestrator.general_chat_agent(request.question, request.chat_summary or "", history)
         t_synthesis_total += time.time() - t_synth_start
         
         if intent == "RAG":
@@ -293,7 +286,6 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
             answer = general_answer
             
         citations = []
-        condensed_question = request.question
 
     t_total = time.time() - t_start
     if intent == "RAG":
@@ -342,8 +334,6 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
     return ChatResponse(
         answer=answer,
         citations=citations_mapped,
-        condensedQuestion=condensed_question,
-        promptSent=prompt_sent
     )
 
 def generate_chat_summary(request: ChatSummarizeRequest) -> ChatSummarizeResponse:

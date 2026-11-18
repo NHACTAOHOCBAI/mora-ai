@@ -70,14 +70,15 @@ class OpenAiMigrationTests(unittest.TestCase):
             generate.side_effect = [
                 json.dumps({"intent": "RAG", "reason": "learning"}),
                 json.dumps({"answer": "Nội dung", "citations": [citation, citation],
-                            "condensedQuestion": "Hỏi", "hasSufficientInfo": True}),
+                            "hasSufficientInfo": True}),
                 json.dumps({"is_faithful": True, "hallucinations": [], "score": 1.0})
             ]
             response = self.client.post("/api/chat", json={"question": "Hỏi", "history": [],
                 "context": [{"pageNumber": 2, "text": "Nguồn", "documentId": 7}]})
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["citations"], [citation])
-            self.assertTrue(response.json()["promptSent"])
+            self.assertNotIn("promptSent", response.json())
+            self.assertNotIn("condensedQuestion", response.json())
             generate.side_effect = None
             generate.return_value = "Tóm tắt"
             response = self.client.post("/api/chat/summarize", json={"history": [{"sender": "user", "text": "Hỏi"}]})

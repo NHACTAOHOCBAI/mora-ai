@@ -33,8 +33,6 @@ class Citation(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     citations: List[Citation]
-    condensedQuestion: Optional[str] = None
-    promptSent: Optional[str] = None
 
 class ChatSummarizeRequest(BaseModel):
     history: List[ChatHistoryItem]
