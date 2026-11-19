@@ -13,7 +13,7 @@ def get_client():
     return OpenAI(api_key=settings.openai_api_key, timeout=settings.openai_timeout,
                   max_retries=settings.openai_max_retries)
 
-def generate(client, model, prompt, instructions, schema=None, operation="chat"):
+def generate(client, model, prompt, instructions, schema=None, operation="chat", usage_sink=None):
     kwargs = dict(model=model, input=prompt, instructions=instructions, store=False)
     try:
         if schema:
@@ -21,13 +21,13 @@ def generate(client, model, prompt, instructions, schema=None, operation="chat")
             if response.status != "completed" or response.output_parsed is None:
                 logger.error("OpenAI structured response chưa hoàn tất hoặc bị từ chối.")
                 raise RuntimeError(AI_ERROR)
-            record_usage(response, model, operation)
+            record_usage(response, model, operation, sink=usage_sink)
             return response.output_parsed.model_dump_json()
         response = client.responses.create(**kwargs)
         if response.status != "completed" or not response.output_text.strip():
             logger.error("OpenAI response chưa hoàn tất hoặc không có nội dung.")
             raise RuntimeError(AI_ERROR)
-        record_usage(response, model, operation)
+        record_usage(response, model, operation, sink=usage_sink)
         return response.output_text
     except OpenAIError as error:
         logger.error("OpenAI request failed: type={}, HTTP={}", type(error).__name__,
@@ -36,7 +36,7 @@ def generate(client, model, prompt, instructions, schema=None, operation="chat")
         safe_error.status_code = getattr(error, "status_code", None)
         raise safe_error from None
 
-def stream_text(client, model, prompt, instructions):
+def stream_text(client, model, prompt, instructions, operation="chat_generation", usage_sink=None):
     """Yield text deltas from Responses API without buffering the full answer."""
     try:
         with client.responses.stream(model=model, input=prompt, instructions=instructions,
@@ -44,6 +44,8 @@ def stream_text(client, model, prompt, instructions):
             for event in stream:
                 if event.type == "response.output_text.delta":
                     yield event.delta
+            # Usage is available only on the completed response, not on text deltas.
+            record_usage(stream.get_final_response(), model, operation, sink=usage_sink)
     except OpenAIError as error:
         logger.error("OpenAI streaming request failed: type={}, HTTP={}", type(error).__name__,
                      getattr(error, "status_code", None))

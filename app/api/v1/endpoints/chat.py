@@ -22,8 +22,9 @@ def chat_endpoint(request: ChatRequest):
 def chat_stream_endpoint(request: ChatRequest):
     def sse():
         try:
-            for event_name, payload in generate_chat_response_stream(request):
-                yield f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+            with collect_usage() as usage:
+                for event_name, payload in generate_chat_response_stream(request, usage_sink=usage):
+                    yield f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
         except Exception:
             yield f"event: error\ndata: {json.dumps({'message': AI_ERROR}, ensure_ascii=False)}\n\n"
     return StreamingResponse(sse(), media_type="text/event-stream",

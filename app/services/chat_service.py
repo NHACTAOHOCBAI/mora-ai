@@ -365,7 +365,7 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
         citations=citations_mapped,
     )
 
-def generate_chat_response_stream(request: ChatRequest):
+def generate_chat_response_stream(request: ChatRequest, usage_sink: list | None = None):
     """Run routing/retrieval first, then yield answer text as OpenAI generates it.
 
     Citations are extracted after text generation so they never block the first token.
@@ -406,7 +406,9 @@ def generate_chat_response_stream(request: ChatRequest):
 
     yield "status", {"stage": "generating"}
     answer_parts = []
-    for delta in stream_text(orchestrator.client, orchestrator.chat_model, prompt, instructions):
+    stream_operation = "rag_generation" if intent == "RAG" and context else "chat_generation"
+    for delta in stream_text(orchestrator.client, orchestrator.chat_model, prompt, instructions,
+                             stream_operation, usage_sink=usage_sink):
         answer_parts.append(delta)
         yield "delta", {"text": delta}
     answer = "".join(answer_parts)
@@ -420,11 +422,13 @@ def generate_chat_response_stream(request: ChatRequest):
         citation_instruction = "Trích xuất citations chính xác từ ngữ cảnh. Không bịa quote, trang hoặc tài liệu."
         try:
             result = json.loads(generate(orchestrator.client, orchestrator.chat_model, citation_prompt,
-                                         citation_instruction, CitationListSchema, operation="rag_citations"))
+                                         citation_instruction, CitationListSchema, operation="rag_citations",
+                                         usage_sink=usage_sink))
             citations = result.get("citations", [])
         except Exception as error:
             failure("citations", error)
     yield "citations", {"citations": citations}
+    yield "usage", {"usage": usage_sink or []}
 
 def generate_chat_summary(request: ChatSummarizeRequest) -> ChatSummarizeResponse:
     client = get_client()
