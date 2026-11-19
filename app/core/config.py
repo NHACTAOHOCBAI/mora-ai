@@ -11,6 +11,12 @@ class Settings(BaseSettings):
     openai_max_retries: int = 2
     retrieval_enabled: bool = False
 
+    benchmark_judge_api_key: Optional[str] = None
+    benchmark_judge_model: str = "gpt-5-mini"
+    benchmark_judge_embedding_model: str = "text-embedding-3-small"
+    benchmark_judge_timeout: float = 45.0
+    benchmark_judge_max_retries: int = 1
+
     # Qdrant Vector Database
     qdrant_url: Optional[str] = None
     qdrant_host: str = "localhost"

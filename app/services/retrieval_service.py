@@ -3,6 +3,7 @@ from loguru import logger
 from openai import OpenAI
 from app.services.openai_service import embed
 from app.core.config import settings
+from app.core.execution_trace import event, failure
 from app.services.vector_service import vector_store
 
 _ranker = None
@@ -70,7 +71,12 @@ def hybrid_retrieve(
     logger.info(f"[Retrieval Agent] Bắt đầu Two-Stage Hybrid Search cho Space {space_id} (docs: {document_ids}) với câu hỏi: '{query}'")
 
     # 1. Tạo Query Vector
-    query_vector = embed(openai_client, [query])[0]
+    event("retrieval", mode="hybrid")
+    try:
+        query_vector = embed(openai_client, [query])[0]
+    except Exception as error:
+        failure("embedding", error)
+        raise
 
     # 2. Dense Search (Qdrant) & Sparse Search (BM25)
     dense_hits = []
@@ -120,10 +126,12 @@ def hybrid_retrieve(
                 final_chunks.append(meta)
 
             logger.info(f"[Retrieval Agent] FlashRank Re-ranker hoàn tất. Đã chọn {len(final_chunks)} chunks tinh hoa nhất.")
+            event("retrieval", rerank="applied")
             return final_chunks
         except Exception as e:
             logger.error(f"[Retrieval Agent] Lỗi trong quá trình FlashRank re-ranking: {e}. Sử dụng kết quả RRF.", exc_info=True)
 
+    event("retrieval", rerank="skipped_single_candidate" if len(merged_candidates) <= 1 else "unavailable_or_failed")
     final_chunks = merged_candidates[:target_top_k]
     logger.info(f"[Retrieval Agent] Đã chọn Top {len(final_chunks)} chunks theo điểm RRF.")
     return final_chunks

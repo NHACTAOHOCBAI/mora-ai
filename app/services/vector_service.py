@@ -47,7 +47,7 @@ class VectorStoreManager:
             self._ensure_collection()
             logger.info("Kết nối Qdrant Vector DB thành công!")
         except Exception as e:
-            logger.error(f"Lỗi khi kết nối tới Qdrant: {e}", exc_info=True)
+            logger.error(f"Lỗi khi kết nối tới Qdrant: {e}")
             self.client = None
 
         # BM25 Storage: Dictionary lưu trữ index BM25 và chunks theo space_id

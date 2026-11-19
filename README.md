@@ -209,3 +209,7 @@ Backend mặc định gọi service tại `http://localhost:8000`; thay đổi b
 - [Mora Frontend](../mora-frontend/README.md): web client, Space và khu quản trị.
 - [Mora Backend](../mora-backend/README.md): REST API, xác thực, WebSocket và điều phối dữ liệu.
 - [Mora Infra](../mora-infra/README.md): chạy toàn bộ stack bằng Docker Compose.
+
+## Benchmark RAG
+
+Trang admin `/admin/benchmarks` quản lý dataset, ground truth, run và kết quả. Xem [hướng dẫn benchmark](benchmarks/README.md).

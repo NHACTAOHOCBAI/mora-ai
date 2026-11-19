@@ -1,0 +1,589 @@
+{
+  "name": "Hệ điều hành — RAG baseline v1",
+  "description": "Bản nháp 36 câu tiếng Việt từ 4 PDF gốc CE-UIT: 12 trực tiếp, 12 tổng hợp, 12 đọc sơ đồ. Chưa được con người duyệt; số trang là vị trí trong từng PDF, tính từ 1.",
+  "spaceId": null,
+  "documents": [
+    {
+      "code": "OS01",
+      "fileName": "[BHT CNPM] HDH _Chuong1-1.pdf",
+      "sha256": "efee96a0b311d72414446200e9f5c10fed225c4dd9060519e45f8fb4fbaaa0f5",
+      "pageCount": 10,
+      "documentId": null
+    },
+    {
+      "code": "OS02",
+      "fileName": "[BHT CNPM] HDH _Chuong1-2.pdf",
+      "sha256": "2ca71b46c6b23342580db2322220061194546755d60cdc037561fe145c6e9c77",
+      "pageCount": 10,
+      "documentId": null
+    },
+    {
+      "code": "OS03",
+      "fileName": "[BHT CNPM] HDH _Chuong1-3.pdf",
+      "sha256": "c6f55b68de755ba5db101de2a8251b5a3ecc4175e5662e0786e93a3ef9e1d85d",
+      "pageCount": 10,
+      "documentId": null
+    },
+    {
+      "code": "OS04",
+      "fileName": "[BHT CNPM] HDH _Chuong1-4.pdf",
+      "sha256": "35b35e2d20439a53dc11aa58d4961572b7dfa3661c1e252bf1dc567605057981",
+      "pageCount": 10,
+      "documentId": null
+    }
+  ],
+  "questions": [
+    {
+      "code": "D01",
+      "type": "DIRECT",
+      "question": "Hệ điều hành là gì và có hai mục tiêu chính nào?",
+      "referenceAnswer": "Hệ điều hành là chương trình trung gian giữa phần cứng và người dùng, điều khiển và phối hợp việc sử dụng phần cứng, cung cấp dịch vụ cơ bản cho ứng dụng. Hai mục tiêu là giúp người dùng sử dụng hệ thống dễ dàng và quản lý, cấp phát tài nguyên hiệu quả.",
+      "explanation": "Định nghĩa và hai mục tiêu được nêu cùng trên slide tổng quan.",
+      "sources": [
+        {
+          "documentCode": "OS01",
+          "pageNumber": 5
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "D02",
+      "type": "DIRECT",
+      "question": "Những tài nguyên cơ bản nào được xếp vào phần cứng máy tính trong tài liệu?",
+      "referenceAnswer": "CPU, bộ nhớ và các thiết bị nhập/xuất (I/O).",
+      "explanation": "Slide phân loại phần cứng liệt kê ba nhóm tài nguyên này.",
+      "sources": [
+        {
+          "documentCode": "OS01",
+          "pageNumber": 7
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "D03",
+      "type": "DIRECT",
+      "question": "Chương trình ứng dụng sử dụng tài nguyên hệ thống để làm gì? Nêu hai ví dụ trong tài liệu.",
+      "referenceAnswer": "Ứng dụng dùng tài nguyên hệ thống để giải quyết bài toán tính toán của người dùng. Ví dụ có trình biên dịch và hệ quản trị cơ sở dữ liệu; tài liệu còn nêu trò chơi điện tử và chương trình kinh doanh.",
+      "explanation": "Đọc định nghĩa và danh sách ví dụ của application programs.",
+      "sources": [
+        {
+          "documentCode": "OS01",
+          "pageNumber": 9
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "D04",
+      "type": "DIRECT",
+      "question": "Kernel, chương trình hệ thống và chương trình ứng dụng được phân biệt như thế nào?",
+      "referenceAnswer": "Kernel là chương trình duy nhất luôn chạy khi máy tính hoạt động. Chương trình hệ thống được đóng gói cùng hệ điều hành nhưng không thuộc kernel. Chương trình ứng dụng không gắn với hoạt động của hệ thống.",
+      "explanation": "Ba nhóm được phân biệt tại mục bên trong hệ điều hành.",
+      "sources": [
+        {
+          "documentCode": "OS02",
+          "pageNumber": 2
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "D05",
+      "type": "DIRECT",
+      "question": "Khi bộ điều khiển thiết bị hoàn tất thao tác, nó báo cho CPU bằng cách nào?",
+      "referenceAnswer": "Bộ điều khiển thiết bị phát sinh một ngắt (interrupt) để báo hiệu cho CPU.",
+      "explanation": "Đây là ý cuối của slide hoạt động bên trong máy tính.",
+      "sources": [
+        {
+          "documentCode": "OS02",
+          "pageNumber": 5
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "D06",
+      "type": "DIRECT",
+      "question": "Interrupt vector chứa gì và trap hoặc exception là loại ngắt nào?",
+      "referenceAnswer": "Interrupt vector chứa địa chỉ các interrupt service routine. Trap hoặc exception là ngắt do phần mềm tạo ra khi có lỗi hoặc yêu cầu của người dùng.",
+      "explanation": "Slide đặc điểm cơ bản của ngắt nêu cả cơ chế vector và định nghĩa trap/exception.",
+      "sources": [
+        {
+          "documentCode": "OS02",
+          "pageNumber": 7
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "D07",
+      "type": "DIRECT",
+      "question": "Hệ thống lưu trữ được phân cấp dựa trên những tiêu chí nào?",
+      "referenceAnswer": "Tốc độ truy xuất, chi phí và khả năng giữ dữ liệu khi không có nguồn điện (volatility).",
+      "explanation": "Ba tiêu chí được liệt kê ở phần cấu trúc lưu trữ.",
+      "sources": [
+        {
+          "documentCode": "OS03",
+          "pageNumber": 1
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "D08",
+      "type": "DIRECT",
+      "question": "Bộ nhớ chính được tài liệu mô tả với các đặc điểm gì?",
+      "referenceAnswer": "Bộ nhớ chính là thiết bị lưu trữ dung lượng lớn duy nhất CPU truy xuất trực tiếp, có truy xuất ngẫu nhiên, mất dữ liệu khi mất điện và được xây dựng bằng DRAM.",
+      "explanation": "Đọc toàn bộ các ý về main memory, không suy rộng sang mọi loại bộ nhớ.",
+      "sources": [
+        {
+          "documentCode": "OS03",
+          "pageNumber": 3
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "D09",
+      "type": "DIRECT",
+      "question": "Cách xử lý I/O thứ hai dùng cơ chế nào và phù hợp với lượng dữ liệu ra sao?",
+      "referenceAnswer": "Cách thứ hai trả điều khiển cho chương trình người dùng mà không chờ I/O hoàn tất, dùng DMA để di chuyển dữ liệu không cần CPU tham gia vào việc chuyển dữ liệu, phù hợp lượng dữ liệu lớn.",
+      "explanation": "Câu trả lời bám phạm vi mô tả cách 2 trong tài liệu.",
+      "sources": [
+        {
+          "documentCode": "OS03",
+          "pageNumber": 7
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "D10",
+      "type": "DIRECT",
+      "question": "Tài liệu phân loại kiến trúc hệ thống máy tính thành ba nhóm nào?",
+      "referenceAnswer": "Hệ thống đơn bộ xử lý, hệ thống đa bộ xử lý và hệ thống gom cụm.",
+      "explanation": "Ba nhóm xuất hiện trên slide mở đầu kiến trúc hệ thống.",
+      "sources": [
+        {
+          "documentCode": "OS04",
+          "pageNumber": 2
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "D11",
+      "type": "DIRECT",
+      "question": "Hệ thống đơn bộ xử lý có thể kèm bộ xử lý chuyên dụng hay không? Các bộ xử lý đó bị giới hạn gì?",
+      "referenceAnswer": "Có. Ngoài một bộ xử lý đa dụng một lõi, hệ thống có thể kèm bộ xử lý chuyên dụng; chúng chỉ thực thi tập lệnh hạn chế và không thể chạy tiến trình.",
+      "explanation": "Phân biệt bộ xử lý đa dụng và special-purpose theo đúng slide.",
+      "sources": [
+        {
+          "documentCode": "OS04",
+          "pageNumber": 4
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "D12",
+      "type": "DIRECT",
+      "question": "Ba ưu điểm của hệ thống đa bộ xử lý được nêu trong tài liệu là gì?",
+      "referenceAnswer": "Tăng thông lượng hệ thống, kinh tế nhờ dùng chung tài nguyên và tăng độ tin cậy vì công việc có thể được chia sẻ cho các bộ xử lý còn lại khi một bộ xử lý hỏng.",
+      "explanation": "Ba ưu điểm nằm trong mục multiprocessor systems.",
+      "sources": [
+        {
+          "documentCode": "OS04",
+          "pageNumber": 6
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "S01",
+      "type": "SYNTHESIS",
+      "question": "Vì sao hệ điều hành phải phân phối và phối hợp tài nguyên thay vì chỉ cung cấp giao diện cho người dùng?",
+      "referenceAnswer": "Máy tính có các tài nguyên phần cứng như CPU, bộ nhớ và thiết bị I/O. Hệ điều hành vừa giúp người dùng sử dụng hệ thống dễ dàng, vừa phân phối tài nguyên, điều khiển và phối hợp hoạt động các chương trình để sử dụng phần cứng hiệu quả.",
+      "explanation": "Kết hợp mục tiêu hệ điều hành, nhóm tài nguyên và vai trò điều phối.",
+      "sources": [
+        {
+          "documentCode": "OS01",
+          "pageNumber": 5
+        },
+        {
+          "documentCode": "OS01",
+          "pageNumber": 7
+        },
+        {
+          "documentCode": "OS01",
+          "pageNumber": 8
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "S02",
+      "type": "SYNTHESIS",
+      "question": "Một trình biên dịch có phải là kernel chỉ vì nó sử dụng tài nguyên máy tính hay không? Giải thích theo phân loại chương trình trong tài liệu.",
+      "referenceAnswer": "Không. Trình biên dịch được liệt kê là ví dụ chương trình ứng dụng, sử dụng tài nguyên để giải bài toán của người dùng. Kernel là chương trình luôn chạy khi máy tính hoạt động; sử dụng tài nguyên không làm ứng dụng trở thành kernel.",
+      "explanation": "Đối chiếu ví dụ ứng dụng với định nghĩa kernel thay vì đồng nhất chúng.",
+      "sources": [
+        {
+          "documentCode": "OS01",
+          "pageNumber": 9
+        },
+        {
+          "documentCode": "OS02",
+          "pageNumber": 2
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "S03",
+      "type": "SYNTHESIS",
+      "question": "CPU và bộ điều khiển thiết bị phối hợp với nhau như thế nào từ kết nối phần cứng đến lúc thao tác I/O hoàn tất?",
+      "referenceAnswer": "CPU và các bộ điều khiển nối qua bus để truy xuất bộ nhớ chia sẻ. Mỗi bộ điều khiển quản lý một loại thiết bị và có buffer cục bộ; CPU chuyển dữ liệu giữa bộ nhớ chính và buffer. CPU và I/O có thể hoạt động đồng thời; khi hoàn tất thao tác, bộ điều khiển phát ngắt cho CPU.",
+      "explanation": "Ghép thông tin kết nối và các bước phối hợp từ hai slide liên tiếp.",
+      "sources": [
+        {
+          "documentCode": "OS02",
+          "pageNumber": 4
+        },
+        {
+          "documentCode": "OS02",
+          "pageNumber": 5
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "S04",
+      "type": "SYNTHESIS",
+      "question": "Mô tả cách hệ điều hành xác định và xử lý ngắt, đồng thời bảo toàn trạng thái CPU.",
+      "referenceAnswer": "Ngắt chuyển điều khiển đến routine xử lý thông qua interrupt vector chứa địa chỉ các routine. Kiến trúc ngắt phải lưu địa chỉ lệnh gây ngắt. Hệ điều hành lưu thanh ghi và bộ đếm chương trình, xác định loại ngắt rồi thực thi mã xử lý tương ứng.",
+      "explanation": "Kết hợp cơ chế interrupt vector với các bước xử lý và lưu trạng thái.",
+      "sources": [
+        {
+          "documentCode": "OS02",
+          "pageNumber": 7
+        },
+        {
+          "documentCode": "OS02",
+          "pageNumber": 9
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "S05",
+      "type": "SYNTHESIS",
+      "question": "So sánh bộ nhớ chính với bộ nhớ thứ cấp về vai trò và khả năng giữ dữ liệu khi mất điện.",
+      "referenceAnswer": "Bộ nhớ chính là vùng lưu trữ dung lượng lớn CPU truy xuất trực tiếp, nhưng dữ liệu mất khi mất điện. Bộ nhớ thứ cấp mở rộng bộ nhớ chính, cung cấp lưu trữ dung lượng lớn không bay hơi để giữ dữ liệu khi không có nguồn điện.",
+      "explanation": "Tổng hợp đối chiếu hai loại lưu trữ trên cùng slide.",
+      "sources": [
+        {
+          "documentCode": "OS03",
+          "pageNumber": 3
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "S06",
+      "type": "SYNTHESIS",
+      "question": "So sánh hai cách xử lý I/O trong tài liệu về lúc trả quyền điều khiển, cơ chế và lượng dữ liệu phù hợp.",
+      "referenceAnswer": "Cách 1 chỉ trả quyền điều khiển khi I/O hoàn tất, dùng ngắt, xử lý một yêu cầu tại một thời điểm và phù hợp lượng dữ liệu nhỏ. Cách 2 trả quyền điều khiển mà không chờ hoàn tất, dùng DMA cho chuyển dữ liệu trực tiếp không cần CPU tham gia chuyển từng phần, phù hợp lượng dữ liệu lớn.",
+      "explanation": "Đối chiếu các tiêu chí trên slide cách 1 và cách 2; không suy diễn rằng DMA hoàn toàn không cần CPU khởi tạo.",
+      "sources": [
+        {
+          "documentCode": "OS03",
+          "pageNumber": 5
+        },
+        {
+          "documentCode": "OS03",
+          "pageNumber": 7
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "S07",
+      "type": "SYNTHESIS",
+      "question": "Vì sao thiết kế dual-core không nên được hiểu là hai processor vật lý riêng biệt?",
+      "referenceAnswer": "Processor là một chip vật lý, core là đơn vị tính toán cơ bản. Multicore đặt nhiều lõi trên cùng một CPU, khác multiprocessor là nhiều bộ xử lý. Sơ đồ dual-core đặt CPU core 0 và CPU core 1 trong cùng khối processor 0, cùng đi qua L2 cache đến bộ nhớ chính.",
+      "explanation": "Kết hợp định nghĩa với ranh giới khối trong hình dual-core.",
+      "sources": [
+        {
+          "documentCode": "OS03",
+          "pageNumber": 10
+        },
+        {
+          "documentCode": "OS04",
+          "pageNumber": 8
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "S08",
+      "type": "SYNTHESIS",
+      "question": "Phân biệt hệ thống đơn bộ xử lý với đa bộ xử lý đối xứng và bất đối xứng theo phạm vi công việc của bộ xử lý.",
+      "referenceAnswer": "Đơn bộ xử lý có một bộ xử lý đa dụng một lõi; bộ xử lý chuyên dụng nếu có chỉ chạy tập lệnh hạn chế. Trong đa xử lý bất đối xứng, mỗi bộ xử lý làm công việc khác nhau; trong đa xử lý đối xứng, mỗi bộ xử lý cùng thực hiện tất cả công việc.",
+      "explanation": "Ghép giới hạn single-processor với hai loại multiprocessor.",
+      "sources": [
+        {
+          "documentCode": "OS04",
+          "pageNumber": 4
+        },
+        {
+          "documentCode": "OS04",
+          "pageNumber": 6
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "S09",
+      "type": "SYNTHESIS",
+      "question": "Kiến trúc đa xử lý đối xứng minh họa cách dùng chung tài nguyên để đạt tính kinh tế như thế nào?",
+      "referenceAnswer": "Tài liệu nêu đa bộ xử lý tiết kiệm nhờ dùng chung tài nguyên. Trong sơ đồ SMP, processor 0 và processor 1 có thanh ghi và cache riêng nhưng cùng nối đến một main memory; bộ nhớ chính là tài nguyên dùng chung được minh họa.",
+      "explanation": "Liên hệ ưu điểm kinh tế với kết nối thực tế trong sơ đồ, không suy ra số liệu chi phí.",
+      "sources": [
+        {
+          "documentCode": "OS04",
+          "pageNumber": 6
+        },
+        {
+          "documentCode": "OS04",
+          "pageNumber": 7
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "S10",
+      "type": "SYNTHESIS",
+      "question": "Giải thích vì sao cần kết hợp bộ nhớ chính với bộ nhớ thứ cấp khi xét cả tốc độ và tính bền vững dữ liệu.",
+      "referenceAnswer": "Hình phân cấp đặt main memory ở nhóm primary storage phía truy xuất nhanh hơn, nhưng thuộc vùng volatile. Bộ nhớ chính mất dữ liệu khi mất điện. Bộ nhớ thứ cấp cung cấp phần mở rộng dung lượng lớn không bay hơi, nên bổ sung khả năng lưu giữ lâu dài thay vì chỉ dựa vào bộ nhớ chính.",
+      "explanation": "Kết hợp vị trí trong hình phân cấp với đặc điểm lưu trữ trên slide sau.",
+      "sources": [
+        {
+          "documentCode": "OS03",
+          "pageNumber": 2
+        },
+        {
+          "documentCode": "OS03",
+          "pageNumber": 3
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "S11",
+      "type": "SYNTHESIS",
+      "question": "Dựa vào mô tả buffer cục bộ và DMA, hãy phân biệt đường chuyển dữ liệu có CPU tham gia với đường DMA cho lượng dữ liệu lớn.",
+      "referenceAnswer": "Ở mô tả hoạt động thông thường, CPU chuyển dữ liệu giữa bộ nhớ chính và buffer cục bộ của bộ điều khiển. Với cách I/O thứ hai, DMA chuyển dữ liệu trực tiếp không cần CPU làm việc chuyển dữ liệu, thích hợp lượng dữ liệu lớn và trả điều khiển mà không đợi I/O hoàn tất.",
+      "explanation": "Kết hợp vai trò CPU trong slide buffer và đặc trưng DMA; không khẳng định CPU không bao giờ khởi tạo I/O.",
+      "sources": [
+        {
+          "documentCode": "OS02",
+          "pageNumber": 5
+        },
+        {
+          "documentCode": "OS03",
+          "pageNumber": 7
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "S12",
+      "type": "SYNTHESIS",
+      "question": "Điểm chung và khác nhau về bộ nhớ chia sẻ giữa mô hình CPU–controller trên bus và kiến trúc đa xử lý đối xứng là gì?",
+      "referenceAnswer": "Cả hai minh họa các thành phần cùng nối đến bộ nhớ dùng chung. Mô hình CPU–controller có CPU cùng disk controller, USB controller và graphics adapter nối qua system bus đến memory. Sơ đồ SMP nhấn mạnh hai processor, mỗi processor có CPU, registers và cache riêng, cùng nối main memory.",
+      "explanation": "Đối chiếu cấu trúc hai hình, không đồng nhất controller với processor đa dụng.",
+      "sources": [
+        {
+          "documentCode": "OS02",
+          "pageNumber": 4
+        },
+        {
+          "documentCode": "OS04",
+          "pageNumber": 7
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "V01",
+      "type": "VISUAL",
+      "question": "Trong sơ đồ cấu trúc hệ thống máy tính, hãy đọc thứ tự các tầng từ user xuống computer hardware và xác định tầng nằm giữa application programs và hardware.",
+      "referenceAnswer": "Thứ tự là user → application programs → operating system → computer hardware. Operating system nằm giữa application programs và computer hardware.",
+      "explanation": "Phải đọc bố trí dọc của các khối trong sơ đồ, không chỉ đoạn mô tả phần cứng.",
+      "sources": [
+        {
+          "documentCode": "OS01",
+          "pageNumber": 7
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "V02",
+      "type": "VISUAL",
+      "question": "Trong sơ đồ cấu trúc hệ thống có user ở trên cùng, các mũi tên giữa các tầng kề nhau là một chiều hay hai chiều? Nêu chuỗi kết nối từ user đến phần cứng.",
+      "referenceAnswer": "Các tầng kề nhau được nối hai chiều: user ↔ application programs ↔ operating system ↔ computer hardware. Hình không vẽ kết nối trực tiếp từ user xuống computer hardware.",
+      "explanation": "Đọc hướng mũi tên và quan hệ kề nhau trong hình; không dùng câu chữ liệt kê users để trả lời.",
+      "sources": [
+        {
+          "documentCode": "OS01",
+          "pageNumber": 10
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "V03",
+      "type": "VISUAL",
+      "question": "Trong hình CPU và các device controller trên system bus, chuột, bàn phím và máy in nối vào controller nào, còn màn hình nối vào khối nào?",
+      "referenceAnswer": "Chuột, bàn phím và máy in nối vào USB controller; màn hình nối vào graphics adapter.",
+      "explanation": "Câu trả lời yêu cầu lần theo đường nối thiết bị trong hình, thông tin không được liệt kê trong đoạn văn của slide.",
+      "sources": [
+        {
+          "documentCode": "OS02",
+          "pageNumber": 4
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "V04",
+      "type": "VISUAL",
+      "question": "Trong hình system bus, hãy liệt kê các khối nối trực tiếp vào bus và cho biết memory nối với các controller theo cách nào.",
+      "referenceAnswer": "CPU, disk controller, USB controller, graphics adapter và memory đều nối vào system bus. Memory được nối đến bus chung, không phải được vẽ thành bộ nhớ riêng nằm trong từng controller.",
+      "explanation": "Cần đọc topology và nhánh xuống memory trong sơ đồ.",
+      "sources": [
+        {
+          "documentCode": "OS02",
+          "pageNumber": 4
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "V05",
+      "type": "VISUAL",
+      "question": "Đọc giản đồ thời gian phát sinh và xử lý ngắt: từ lúc có I/O request đầu tiên đến interrupt handled, các mốc diễn ra theo thứ tự nào và CPU có lập tức chuyển sang xử lý ngắt khi bắt đầu truyền không?",
+      "referenceAnswer": "Thứ tự là I/O request → transfer done → interrupt signaled → interrupt handled. Trong lúc thiết bị transferring sau I/O request, CPU vẫn ở user program; CPU chỉ chuyển xuống I/O interrupt processing khi interrupt được báo, rồi quay lại user program khi xử lý xong.",
+      "explanation": "Cần đối chiếu hai đường thời gian CPU/I/O và các đường mốc dọc; đoạn văn tiêu đề không đủ trả lời.",
+      "sources": [
+        {
+          "documentCode": "OS02",
+          "pageNumber": 8
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "V06",
+      "type": "VISUAL",
+      "question": "Trong hình phân cấp lưu trữ, hãy đọc thứ tự từ trên xuống và cho biết dung lượng cùng thời gian truy xuất thay đổi theo chiều đó như thế nào.",
+      "referenceAnswer": "Thứ tự là registers, cache, main memory, nonvolatile memory, hard-disk drives, optical disk, magnetic tapes. Đi từ trên xuống, dung lượng lớn hơn và truy xuất chậm hơn (thời gian truy xuất tăng).",
+      "explanation": "Phải đọc bảy khối theo vị trí và hai mũi tên dung lượng/tốc độ trên hình.",
+      "sources": [
+        {
+          "documentCode": "OS03",
+          "pageNumber": 2
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "V07",
+      "type": "VISUAL",
+      "question": "Theo ranh giới nét đứt và các ngoặc nhóm trong hình phân cấp lưu trữ, vùng volatile kết thúc ở đâu và mỗi nhóm primary, secondary, tertiary chứa những tầng nào?",
+      "referenceAnswer": "Vùng volatile kết thúc sau main memory; đường nét đứt nằm giữa main memory và nonvolatile memory. Primary gồm registers, cache, main memory; secondary gồm nonvolatile memory và hard-disk drives; tertiary gồm optical disk và magnetic tapes.",
+      "explanation": "Phải đọc ranh giới và ngoặc nhóm của hình, đặc biệt không bỏ qua nonvolatile memory như một tầng riêng.",
+      "sources": [
+        {
+          "documentCode": "OS03",
+          "pageNumber": 2
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "V08",
+      "type": "VISUAL",
+      "question": "Trong lưu đồ xử lý I/O dựa trên ngắt, hãy lần theo đường từ controller phát tín hiệu ngắt đến lúc CPU tiếp tục tác vụ bị ngắt; mũi tên số 4, 5 và 6 nối những bước nào?",
+      "referenceAnswer": "Mũi tên 4 đi từ khối controller báo input ready/output complete/error và phát tín hiệu ngắt sang khối CPU nhận ngắt, chuyển điều khiển cho interrupt handler. Mũi tên 5 đến bước handler xử lý dữ liệu rồi return from interrupt. Mũi tên 6 đến bước CPU tiếp tục tác vụ đã bị ngắt.",
+      "explanation": "Cần lần theo các mũi tên có số trong lưu đồ hai cột CPU và I/O controller.",
+      "sources": [
+        {
+          "documentCode": "OS03",
+          "pageNumber": 6
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "V09",
+      "type": "VISUAL",
+      "question": "Trong sơ đồ Von Neumann, đường DMA nối trực tiếp những khối nào? So sánh với hướng mũi tên I/O request và interrupt giữa CPU với device.",
+      "referenceAnswer": "DMA nối trực tiếp device với memory theo hai chiều. I/O request đi từ CPU xuống device; interrupt đi từ device lên CPU. Đường DMA không đi qua khối CPU trong sơ đồ.",
+      "explanation": "Đọc các đầu mũi tên của ba đường nối trong hình; tiêu đề và văn bản trích xuất không chứa quan hệ này.",
+      "sources": [
+        {
+          "documentCode": "OS03",
+          "pageNumber": 9
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "V10",
+      "type": "VISUAL",
+      "question": "Trong hình kiến trúc đa xử lý đối xứng có processor 0 và processor 1, những thành phần nào nằm riêng trong mỗi processor và tài nguyên nào được nối dùng chung?",
+      "referenceAnswer": "Processor 0 chứa CPU 0, registers và cache; processor 1 chứa CPU 1, registers và cache riêng tương ứng. Hai nhánh cache cùng nối xuống main memory dùng chung bên ngoài hai processor.",
+      "explanation": "Cần đọc ranh giới các khối lồng nhau và đường nối xuống bộ nhớ trong hình SMP.",
+      "sources": [
+        {
+          "documentCode": "OS04",
+          "pageNumber": 7
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "V11",
+      "type": "VISUAL",
+      "question": "Trong hình thiết kế nhân kép, L1 cache và L2 cache thuộc riêng từng core hay được dùng chung? Mô tả đường nối từ hai core xuống main memory.",
+      "referenceAnswer": "Mỗi CPU core có registers và L1 cache riêng. Hai core nằm trong cùng processor 0 và cùng nối xuống một L2 cache chung; từ L2 có đường xuống main memory bên ngoài processor.",
+      "explanation": "Cần phân biệt hai khối L1 bên trong core với khối L2 bao trùm đường nối của cả hai.",
+      "sources": [
+        {
+          "documentCode": "OS04",
+          "pageNumber": 8
+        }
+      ],
+      "approved": false
+    },
+    {
+      "code": "V12",
+      "type": "VISUAL",
+      "question": "Trong sơ đồ NUMA gồm CPU 0 đến CPU 3, mỗi CPU nối trực tiếp với bộ nhớ nào và các CPU được nối với nhau ra sao?",
+      "referenceAnswer": "CPU 0 nối memory 0, CPU 1 nối memory 1, CPU 2 nối memory 2 và CPU 3 nối memory 3. Bốn CPU có các liên kết interconnect nét đứt ngang, dọc và chéo; không có một khối main memory chung duy nhất được vẽ ở giữa.",
+      "explanation": "Đọc cặp CPU–memory và các đường interconnect trong hình NUMA; không suy diễn độ trễ cụ thể từ hình.",
+      "sources": [
+        {
+          "documentCode": "OS04",
+          "pageNumber": 9
+        }
+      ],
+      "approved": false
+    }
+  ]
+}
