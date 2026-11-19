@@ -117,7 +117,7 @@ def configuration():
         "evaluatorModel": settings.openai_model,
         "judgeModel": settings.benchmark_judge_model,
         "judgeEmbeddingModel": settings.benchmark_judge_embedding_model,
-        "judgeAdapter": "openai-responses-v1",
+        "judgeAdapter": "openai-responses-v2",
         "metricDetailsVersion": 1,
         "judgeTimeout": settings.benchmark_judge_timeout,
         "judgeMaxRetries": settings.benchmark_judge_max_retries,

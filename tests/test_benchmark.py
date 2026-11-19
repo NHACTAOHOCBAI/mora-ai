@@ -155,7 +155,7 @@ class EvaluatorTests(unittest.TestCase):
 
 class JudgeBoundaryTests(unittest.IsolatedAsyncioTestCase):
     async def test_responses_adapter_preserves_schema_without_wrapper_retries(self):
-        from app.services.benchmark_judge import ResponsesJudge
+        from app.services.benchmark_judge import JUDGE_REASON_INSTRUCTIONS, ResponsesJudge
         from pydantic import BaseModel
         class Verdict(BaseModel):
             verdict: int
@@ -166,7 +166,7 @@ class JudgeBoundaryTests(unittest.IsolatedAsyncioTestCase):
         result = await judge.agenerate("Check source", Verdict)
         self.assertEqual(result.verdict, 1)
         client.responses.parse.assert_awaited_once_with(
-            model="gpt-5-mini", input="Check source", text_format=Verdict,
+            model="gpt-5-mini", input="Check source", instructions=JUDGE_REASON_INSTRUCTIONS, text_format=Verdict,
             store=False, max_output_tokens=8192)
         client.responses.parse.reset_mock()
         client.responses.parse.side_effect = TimeoutError("provider timed out")
