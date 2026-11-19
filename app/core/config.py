@@ -29,6 +29,30 @@ class Settings(BaseSettings):
     retrieval_dense_limit: int = 20
     retrieval_sparse_limit: int = 20
 
+    # Operational analytics. Rates are USD per million tokens and are deliberately
+    # configuration, rather than hard-coded provider pricing.
+    ai_usage_vnd_per_usd: float = 26000
+    ai_usage_pricing_version: str = "2026-11"
+    ai_usage_default_input_per_million_usd: float = 0
+    ai_usage_default_cached_input_per_million_usd: float = 0
+    ai_usage_default_output_per_million_usd: float = 0
+    ai_usage_gpt_5_mini_input_per_million_usd: float = 0.25
+    ai_usage_gpt_5_mini_cached_input_per_million_usd: float = 0.025
+    ai_usage_gpt_5_mini_output_per_million_usd: float = 2.0
+    ai_usage_text_embedding_3_small_input_per_million_usd: float = 0.02
+
+    def model_prices(self):
+        return {
+            "default": {"input": self.ai_usage_default_input_per_million_usd,
+                        "cached_input": self.ai_usage_default_cached_input_per_million_usd,
+                        "output": self.ai_usage_default_output_per_million_usd},
+            "gpt-5-mini": {"input": self.ai_usage_gpt_5_mini_input_per_million_usd,
+                            "cached_input": self.ai_usage_gpt_5_mini_cached_input_per_million_usd,
+                            "output": self.ai_usage_gpt_5_mini_output_per_million_usd},
+            "text-embedding-3-small": {"input": self.ai_usage_text_embedding_3_small_input_per_million_usd,
+                                         "cached_input": 0, "output": 0},
+        }
+
     # Credentials belong to the AI service, independent of process cwd.
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(__file__), "..", "..", ".env"),

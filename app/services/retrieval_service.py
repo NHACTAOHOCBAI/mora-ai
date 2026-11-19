@@ -73,7 +73,7 @@ def hybrid_retrieve(
     # 1. Tạo Query Vector
     event("retrieval", mode="hybrid")
     try:
-        query_vector = embed(openai_client, [query])[0]
+        query_vector = embed(openai_client, [query], operation="retrieval_embedding")[0]
     except Exception as error:
         failure("embedding", error)
         raise

@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel, ConfigDict
 from app.core.config import settings
 from app.core.execution_trace import log_benchmark_failure
+from app.core.usage_tracking import collect_usage
 from app.services.benchmark_service import ExecuteSample, ScoreSample, CorpusRequest, configuration, execute, score, prepare_corpus
 
 
@@ -24,8 +25,9 @@ async def parse_endpoint(file: UploadFile = File(...)):
     from app.services.parser_service import parse_pdf_layout_and_diagrams
     from starlette.concurrency import run_in_threadpool
     try:
-        pages = await run_in_threadpool(parse_pdf_layout_and_diagrams, await file.read())
-        return {"status": "success", "pages": pages}
+        with collect_usage() as usage:
+            pages = await run_in_threadpool(parse_pdf_layout_and_diagrams, await file.read())
+            return {"status": "success", "pages": pages, "usage": usage}
     except Exception as error:
         log_benchmark_failure("parse", error)
         raise HTTPException(502, "Benchmark PDF parsing failed")
@@ -60,7 +62,9 @@ def config_endpoint():
 @router.post("/execute")
 def execute_endpoint(request: ExecuteSample):
     try:
-        return execute(request)
+        with collect_usage() as usage:
+            result = execute(request)
+            return {**result, "usage": usage}
     except ValueError:
         raise HTTPException(409, "Benchmark configuration mismatch")
     except Exception as error:
@@ -71,7 +75,9 @@ def execute_endpoint(request: ExecuteSample):
 @router.post("/score")
 async def score_endpoint(request: ScoreSample):
     try:
-        return await score(request)
+        with collect_usage() as usage:
+            result = await score(request)
+            return {**result, "usage": usage}
     except ValueError:
         raise HTTPException(409, "Benchmark configuration mismatch")
     except Exception as error:

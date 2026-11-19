@@ -22,7 +22,7 @@ def extract_page(client, page_pdf_bytes, page_num):
         {"type": "input_text", "text": prompt}
     ]}]
     return generate(client, settings.openai_parser_model, content,
-                    "Trích xuất trang PDF thành Markdown chính xác, giữ bảng, công thức và mô tả hình.")
+                    "Trích xuất trang PDF thành Markdown chính xác, giữ bảng, công thức và mô tả hình.", operation="pdf_parsing")
 
 
 def parse_pdf_layout_and_diagrams(pdf_bytes):

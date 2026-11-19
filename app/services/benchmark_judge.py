@@ -1,5 +1,6 @@
 """Ragas structured-output boundary with one retry policy: the OpenAI SDK."""
 from ragas.llms.base import InstructorBaseRagasLLM
+from app.core.usage_tracking import record_usage
 
 
 class ResponsesJudge(InstructorBaseRagasLLM):
@@ -17,4 +18,5 @@ class ResponsesJudge(InstructorBaseRagasLLM):
         )
         if response.status != "completed" or response.output_parsed is None:
             raise ValueError("Judge response incomplete or refused")
+        record_usage(response, self.model, "benchmark_judge")
         return response.output_parsed

@@ -54,7 +54,7 @@ class MultiAgentOrchestrator:
             f"--- Câu hỏi mới ---\n{question}\n"
         )
         try:
-            response = generate(self.client, self.router_model, prompt, system_instruction, RouteSchema)
+            response = generate(self.client, self.router_model, prompt, system_instruction, RouteSchema, operation="chat_router")
             result = json.loads(response)
             intent = result.get("intent", "GENERAL").upper()
             logger.info(f"[Router Agent] Decision: {intent} (Reason: {result.get('reason')})")
@@ -124,7 +124,7 @@ class MultiAgentOrchestrator:
             f"--- CÂU HỎI MỚI ---\nNgười dùng: {question}\n"
         )
         try:
-            response = generate(self.client, self.chat_model, prompt, system_instruction)
+            response = generate(self.client, self.chat_model, prompt, system_instruction, operation="chat_generation")
             return response, system_instruction + "\n\n" + prompt
         except Exception as error:
             failure("general", error)
@@ -163,7 +163,7 @@ class MultiAgentOrchestrator:
             f"--- CÂU HỎI MỚI ---\nNgười dùng: {question}\n"
         )
         try:
-            response = generate(self.client, self.chat_model, prompt, system_instruction, RAGResponseSchema)
+            response = generate(self.client, self.chat_model, prompt, system_instruction, RAGResponseSchema, operation="rag_generation")
             result = json.loads(response)
             result["promptSent"] = system_instruction + "\n\n" + prompt
             return result
@@ -190,7 +190,7 @@ class MultiAgentOrchestrator:
             f"--- Câu trả lời được sinh ra ---\n{answer}\n"
         )
         try:
-            response = generate(self.client, self.evaluator_model, prompt, system_instruction, EvaluationSchema)
+            response = generate(self.client, self.evaluator_model, prompt, system_instruction, EvaluationSchema, operation="rag_evaluation")
             result = EvaluationSchema.model_validate_json(response)
             is_faithful = result.is_faithful
             score = result.score
@@ -396,7 +396,7 @@ def generate_chat_summary(request: ChatSummarizeRequest) -> ChatSummarizeRespons
         prompt += history_str
 
     try:
-        response = generate(client, model_name, prompt, system_instruction)
+        response = generate(client, model_name, prompt, system_instruction, operation="chat_summary")
         summary = response.strip()
         logger.info(f"Tóm tắt hội thoại thành công: {summary}")
         return ChatSummarizeResponse(summary=summary)

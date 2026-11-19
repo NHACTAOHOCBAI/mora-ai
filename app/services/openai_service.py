@@ -2,6 +2,7 @@
 from openai import OpenAI, OpenAIError
 from loguru import logger
 from app.core.config import settings
+from app.core.usage_tracking import record_usage
 
 AI_ERROR = "Dịch vụ AI đang gặp sự cố. Vui lòng thử lại sau."
 
@@ -12,7 +13,7 @@ def get_client():
     return OpenAI(api_key=settings.openai_api_key, timeout=settings.openai_timeout,
                   max_retries=settings.openai_max_retries)
 
-def generate(client, model, prompt, instructions, schema=None):
+def generate(client, model, prompt, instructions, schema=None, operation="chat"):
     kwargs = dict(model=model, input=prompt, instructions=instructions, store=False)
     try:
         if schema:
@@ -20,11 +21,13 @@ def generate(client, model, prompt, instructions, schema=None):
             if response.status != "completed" or response.output_parsed is None:
                 logger.error("OpenAI structured response chưa hoàn tất hoặc bị từ chối.")
                 raise RuntimeError(AI_ERROR)
+            record_usage(response, model, operation)
             return response.output_parsed.model_dump_json()
         response = client.responses.create(**kwargs)
         if response.status != "completed" or not response.output_text.strip():
             logger.error("OpenAI response chưa hoàn tất hoặc không có nội dung.")
             raise RuntimeError(AI_ERROR)
+        record_usage(response, model, operation)
         return response.output_text
     except OpenAIError as error:
         logger.error("OpenAI request failed: type={}, HTTP={}", type(error).__name__,
@@ -33,10 +36,11 @@ def generate(client, model, prompt, instructions, schema=None):
         safe_error.status_code = getattr(error, "status_code", None)
         raise safe_error from None
 
-def embed(client, texts):
+def embed(client, texts, operation="embedding"):
     response = client.embeddings.create(model=settings.openai_embedding_model,
                                         input=texts, dimensions=1536)
     items = sorted(response.data, key=lambda item: item.index)
     if len(items) != len(texts) or any(len(item.embedding) != 1536 for item in items):
         raise RuntimeError(AI_ERROR)
+    record_usage(response, settings.openai_embedding_model, operation)
     return [item.embedding for item in items]

@@ -33,6 +33,7 @@ class Citation(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     citations: List[Citation]
+    usage: List[dict] = []
 
 class ChatSummarizeRequest(BaseModel):
     history: List[ChatHistoryItem]
@@ -40,3 +41,4 @@ class ChatSummarizeRequest(BaseModel):
 
 class ChatSummarizeResponse(BaseModel):
     summary: str
+    usage: List[dict] = []

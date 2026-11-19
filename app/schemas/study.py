@@ -35,3 +35,4 @@ class StudyGenerateResponse(BaseModel):
     title: str
     flashcards: List[GeneratedFlashcard]
     quizQuestions: List[GeneratedQuizQuestion]
+    usage: List[dict] = []

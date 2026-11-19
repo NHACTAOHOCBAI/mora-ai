@@ -6,6 +6,7 @@ from app.services.openai_service import get_client, embed
 
 from app.services.chunking_service import extract_semantic_chunks_from_pages
 from app.services.vector_service import vector_store
+from app.core.usage_tracking import collect_usage
 
 router = APIRouter()
 
@@ -42,8 +43,9 @@ def index_endpoint(request: IndexRequest):
 
     embeddings = []
     try:
-        for offset in range(0, len(chunks), 32):
-            embeddings.extend(embed(client, [c.enrichedContent for c in chunks[offset:offset + 32]]))
+        with collect_usage() as usage:
+            for offset in range(0, len(chunks), 32):
+                embeddings.extend(embed(client, [c.enrichedContent for c in chunks[offset:offset + 32]], operation="document_indexing"))
     except Exception:
         raise HTTPException(status_code=503, detail="Không thể tạo chỉ mục tài liệu lúc này.") from None
 
@@ -63,5 +65,5 @@ def index_endpoint(request: IndexRequest):
     return {
         "status": "success", 
         "message": f"Document {request.documentId} indexed successfully",
-        "chunksCount": len(chunks)
+        "chunksCount": len(chunks), "usage": usage
     }
