@@ -23,6 +23,7 @@ class ChatRequest(BaseModel):
     documentId: Optional[int] = None
     document_ids: Optional[List[int]] = None
     documentIds: Optional[List[int]] = None
+    stream_id: Optional[str] = None
 
 class Citation(BaseModel):
     pageNumber: int

@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import List
 from loguru import logger
 from app.services.openai_service import get_client, embed
+from app.core.runtime_config import RuntimeConfigurationError
 
 from app.services.chunking_service import extract_semantic_chunks_from_pages
 from app.services.vector_service import vector_store
@@ -26,6 +27,8 @@ def index_endpoint(request: IndexRequest):
     
     try:
         client = get_client()
+    except RuntimeConfigurationError:
+        raise HTTPException(status_code=503, detail="Dịch vụ AI chưa được cấu hình.") from None
     except Exception:
         raise HTTPException(status_code=503, detail="Dịch vụ AI chưa sẵn sàng.") from None
 

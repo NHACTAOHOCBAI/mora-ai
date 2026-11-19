@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel, ConfigDict
-from app.core.config import settings
+from app.core.runtime_config import refresh_runtime_config, RuntimeConfigurationError
 from app.core.execution_trace import log_benchmark_failure
 from app.core.usage_tracking import collect_usage
 from app.services.benchmark_service import ExecuteSample, ScoreSample, CorpusRequest, configuration, execute, score, prepare_corpus
@@ -18,8 +18,10 @@ class BenchmarkIndexRequest(BaseModel):
 
 @router.post("/parse")
 async def parse_endpoint(file: UploadFile = File(...)):
-    if not settings.openai_api_key:
-        raise HTTPException(503, "Configure OPENAI_API_KEY on AI Service")
+    try:
+        refresh_runtime_config()
+    except RuntimeConfigurationError:
+        raise HTTPException(503, "Dịch vụ AI chưa được cấu hình.") from None
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "PDF required")
     from app.services.parser_service import parse_pdf_layout_and_diagrams
@@ -35,8 +37,10 @@ async def parse_endpoint(file: UploadFile = File(...)):
 
 @router.post("/index")
 def index_endpoint(request: BenchmarkIndexRequest):
-    if not settings.openai_api_key:
-        raise HTTPException(503, "Configure OPENAI_API_KEY on AI Service")
+    try:
+        refresh_runtime_config()
+    except RuntimeConfigurationError:
+        raise HTTPException(503, "Dịch vụ AI chưa được cấu hình.") from None
     from app.api.v1.endpoints.index import IndexRequest, index_endpoint as index_document
     return index_document(IndexRequest(**request.model_dump()))
 

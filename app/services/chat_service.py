@@ -4,6 +4,7 @@ from typing import List, Tuple, Optional
 from pydantic import BaseModel
 from loguru import logger
 from app.services.openai_service import get_client, generate, stream_text, AI_ERROR
+from app.core.stream_control import finish, is_cancel_requested, start
 
 from app.core.config import settings
 from app.core.execution_trace import event, failure, execution_trace
@@ -71,7 +72,8 @@ class MultiAgentOrchestrator:
         question: str, 
         space_id: Optional[int] = None, 
         raw_context: List[dict] = None,
-        document_ids: Optional[List[int]] = None
+        document_ids: Optional[List[int]] = None,
+        usage_sink: list | None = None
     ) -> List[dict]:
         logger.info(f"[Retrieval Agent] Bắt đầu xử lý truy vấn cho Space ID: {space_id}, Document IDs: {document_ids}")
         if space_id and settings.retrieval_enabled and document_ids != []:
@@ -81,7 +83,8 @@ class MultiAgentOrchestrator:
                     query=question,
                     space_id=space_id,
                     openai_client=self.client,
-                    document_ids=document_ids
+                    document_ids=document_ids,
+                    usage_sink=usage_sink
                 )
                 if retrieved_chunks:
                     event("retrieval", contextSource="hybrid")
@@ -371,6 +374,7 @@ def generate_chat_response_stream(request: ChatRequest, usage_sink: list | None 
     Citations are extracted after text generation so they never block the first token.
     """
     orchestrator = MultiAgentOrchestrator()
+    stream_control = start(request.stream_id, orchestrator.client) if request.stream_id else None
     history = [{"sender": h.sender, "text": h.text} for h in request.history]
     space_id = request.space_id or request.spaceId
     document_ids = request.document_ids if request.document_ids is not None else request.documentIds
@@ -382,7 +386,8 @@ def generate_chat_response_stream(request: ChatRequest, usage_sink: list | None 
     intent = "RAG" if document_ids else "GENERAL"
     if intent == "RAG":
         yield "status", {"stage": "retrieving"}
-        context = orchestrator.retrieval_agent(request.question, space_id, raw_context, document_ids)
+        context = orchestrator.retrieval_agent(request.question, space_id, raw_context, document_ids,
+                                               usage_sink=usage_sink)
 
     if intent == "RAG" and context:
         context_str = "\n---\n".join(
@@ -408,13 +413,13 @@ def generate_chat_response_stream(request: ChatRequest, usage_sink: list | None 
     answer_parts = []
     stream_operation = "rag_generation" if intent == "RAG" and context else "chat_generation"
     for delta in stream_text(orchestrator.client, orchestrator.chat_model, prompt, instructions,
-                             stream_operation, usage_sink=usage_sink):
+                             stream_operation, usage_sink=usage_sink, stream_control=stream_control):
         answer_parts.append(delta)
         yield "delta", {"text": delta}
     answer = "".join(answer_parts)
 
     citations = []
-    if intent == "RAG" and context and answer.strip():
+    if not is_cancel_requested(stream_control) and intent == "RAG" and context and answer.strip():
         yield "status", {"stage": "citing"}
         citation_prompt = (f"Câu trả lời:\n{answer}\n\nNgữ cảnh:\n" +
                            "\n---\n".join(json.dumps(c, ensure_ascii=False) for c in context) +
@@ -427,8 +432,11 @@ def generate_chat_response_stream(request: ChatRequest, usage_sink: list | None 
             citations = result.get("citations", [])
         except Exception as error:
             failure("citations", error)
-    yield "citations", {"citations": citations}
+    if not is_cancel_requested(stream_control):
+        yield "citations", {"citations": citations}
     yield "usage", {"usage": usage_sink or []}
+    if request.stream_id:
+        finish(request.stream_id, stream_control)
 
 def generate_chat_summary(request: ChatSummarizeRequest) -> ChatSummarizeResponse:
     client = get_client()

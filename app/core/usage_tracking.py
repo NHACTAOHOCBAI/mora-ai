@@ -34,7 +34,9 @@ def record_usage(response: Any, model: str, operation: str, sink: list | None = 
     output_tokens = _value(usage, "output_tokens")
     total_tokens = _value(usage, "total_tokens") or input_tokens + output_tokens
     cached = _value(getattr(usage, "input_tokens_details", None), "cached_tokens")
-    prices = settings.model_prices().get(model, settings.model_prices().get("default", {}))
+    prices = settings.model_prices().get(model)
+    if prices is None or settings.ai_usage_vnd_per_usd is None or not settings.ai_usage_pricing_version:
+        raise RuntimeError("Admin pricing configuration is incomplete")
     usd = (Decimal(input_tokens - cached) * Decimal(str(prices.get("input", 0)))
            + Decimal(cached) * Decimal(str(prices.get("cached_input", prices.get("input", 0))))
            + Decimal(output_tokens) * Decimal(str(prices.get("output", 0)))) / Decimal(1_000_000)

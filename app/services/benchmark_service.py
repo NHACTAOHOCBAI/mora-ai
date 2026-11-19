@@ -12,6 +12,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel, ConfigDict, Field
 from loguru import logger
 from app.core.config import settings
+from app.core.runtime_config import refresh_runtime_config
 from app.core.execution_trace import execution_trace, error_summary, log_benchmark_failure, failure, event
 from app.schemas.chat import ChatRequest, ChatContextItem
 from app.services.chat_service import generate_chat_response
@@ -97,8 +98,9 @@ class ScoreSample(BaseModel):
 
 
 def configuration():
-    if not settings.openai_api_key:
-        raise ValueError("Configure OPENAI_API_KEY on AI Service")
+    refresh_runtime_config()
+    if not settings.openai_api_key or not settings.benchmark_judge_api_key:
+        raise ValueError("Admin AI configuration is incomplete")
     def version(package):
         return importlib.metadata.version(package)
     root = Path(__file__).resolve().parents[2]
@@ -168,7 +170,8 @@ async def score(request: ScoreSample):
     from app.services.benchmark_judge import ResponsesJudge
     from app.services.benchmark_details import RecordingJudge, RecordingEmbeddings, details_for
     from ragas.metrics.collections import ContextPrecision, Faithfulness, AnswerRelevancy
-    client = AsyncOpenAI(api_key=settings.benchmark_judge_api_key or settings.openai_api_key,
+    refresh_runtime_config()
+    client = AsyncOpenAI(api_key=settings.benchmark_judge_api_key,
                          timeout=settings.benchmark_judge_timeout,
                          max_retries=settings.benchmark_judge_max_retries)
     try:

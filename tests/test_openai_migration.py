@@ -42,7 +42,7 @@ class OpenAiMigrationTests(unittest.TestCase):
             self.assertFalse(set(properties) & {"api_key", "apiKey", "chat_model", "summarizer_model"})
 
     def test_server_key_timeout_retry_and_no_credentials_from_request(self):
-        with patch.object(settings, "openai_api_key", "server-owned"), patch.object(openai_service, "OpenAI") as sdk:
+        with patch.object(openai_service, "refresh_runtime_config"), patch.object(settings, "openai_api_key", "server-owned"), patch.object(openai_service, "OpenAI") as sdk:
             openai_service.get_client()
         self.assertEqual(sdk.call_args.kwargs["api_key"], "server-owned")
         self.assertEqual(sdk.call_args.kwargs["timeout"], 60)

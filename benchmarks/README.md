@@ -34,14 +34,9 @@ RAG và không đưa ground truth vào bước sinh câu trả lời.
 ## Chuẩn bị
 
 1. Cài dependencies bằng `venv\Scripts\python.exe -m pip install -r requirements.txt`.
-2. Bổ sung các biến benchmark trong `.env.example` của AI vào `.env` AI. Không ghi đè
-   `.env` đang có. Backend không cần biến môi trường benchmark riêng.
-   Generation và parser dùng chung `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_PARSER_MODEL` với chat.
-   Judge dùng `BENCHMARK_JUDGE_MODEL`, `BENCHMARK_JUDGE_EMBEDDING_MODEL`; key judge
-   mặc định dùng chung `OPENAI_API_KEY`, hoặc đặt `BENCHMARK_JUDGE_API_KEY` riêng.
-   Tất cả chỉ cấu hình tại AI Service. Backend gửi PDF/pages tới API nội bộ; AI tự lấy key/model server.
-   Không lấy key của admin. Xóa `BENCHMARK_GENERATION_API_KEY` và
-   `BENCHMARK_PARSER_MODEL` cũ khỏi `.env` Backend sau khi chuyển sang `.env` AI.
+2. Cấu hình toàn bộ OpenAI cho Benchmark trên trang Admin: key judge riêng, model judge và
+   model embedding judge. Backend không cần biến môi trường Benchmark riêng; AI service đọc
+   cấu hình qua API nội bộ có xác thực.
 3. Khởi động PostgreSQL, Qdrant, Backend, AI và Frontend như README các repo.
    Hibernate `ddl-auto=update` tạo bốn bảng benchmark mới; không sửa bảng chat.
 4. Đăng nhập admin, mở `/admin/benchmarks`, nhập
@@ -58,7 +53,7 @@ RAG và không đưa ground truth vào bước sinh câu trả lời.
 
 Không tự chạy benchmark trả phí trong quá trình cài đặt. Cấu hình model mặc định có
 thể đổi bằng biến môi trường; dùng model mà tài khoản OpenAI của bạn được phép gọi.
-Model embedding retrieval hiện tại vẫn theo `OPENAI_EMBEDDING_MODEL`, phải khớp với
+Model embedding retrieval hiện tại lấy từ cấu hình Admin, phải khớp với
 corpus đã index. Judge embedding độc lập với embedding retrieval.
 `RETRIEVAL_ENABLED` được ghi trong snapshot: khi tắt, benchmark đo nhánh context thô
 giống chat hiện tại. Muốn đo Hybrid/RRF/FlashRank, hoàn tất reindex theo README chính

@@ -2,6 +2,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from loguru import logger
 from app.services.parser_service import parse_pdf_layout_and_diagrams
 from app.core.usage_tracking import collect_usage
+from app.core.runtime_config import RuntimeConfigurationError
 
 router = APIRouter()
 
@@ -18,6 +19,8 @@ def parse_pdf_endpoint(
         with collect_usage() as usage:
             parsed_pages = parse_pdf_layout_and_diagrams(content)
             return {"status": "success", "pages": parsed_pages, "usage": usage}
+    except RuntimeConfigurationError:
+        raise HTTPException(status_code=503, detail="Dịch vụ AI chưa được cấu hình.") from None
     except Exception as exc:
         logger.exception("PDF parsing failed: {}", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Không thể xử lý tài liệu PDF. Vui lòng thử lại sau.")

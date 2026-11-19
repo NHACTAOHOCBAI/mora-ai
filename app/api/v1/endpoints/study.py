@@ -1,7 +1,8 @@
 import json
 from fastapi import APIRouter, HTTPException
 from app.schemas.study import StudyGenerateRequest, StudyGenerateResponse
-from app.services.openai_service import get_client, generate, AI_ERROR
+from app.services.openai_service import get_client, generate, AI_ERROR, AI_CONFIGURATION_ERROR
+from app.core.runtime_config import RuntimeConfigurationError
 from app.services.vector_service import vector_store
 from app.core.config import settings
 from app.core.usage_tracking import collect_usage
@@ -48,5 +49,7 @@ Tiêu đề ngắn gọn, mô tả chủ đề chung của bộ tài liệu."""
             return {**result.model_dump(), "usage": usage}
     except HTTPException:
         raise
+    except RuntimeConfigurationError:
+        raise HTTPException(status_code=503, detail=AI_CONFIGURATION_ERROR) from None
     except Exception:
         raise HTTPException(status_code=503, detail=AI_ERROR) from None

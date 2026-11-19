@@ -56,7 +56,8 @@ def hybrid_retrieve(
     space_id: int,
     openai_client: OpenAI,
     top_k: int = None,
-    document_ids: Optional[List[int]] = None
+    document_ids: Optional[List[int]] = None,
+    usage_sink: list | None = None
 ) -> List[Dict[str, Any]]:
     """
     Quy trình Two-Stage Hybrid Search & Re-ranking:
@@ -73,7 +74,7 @@ def hybrid_retrieve(
     # 1. Tạo Query Vector
     event("retrieval", mode="hybrid")
     try:
-        query_vector = embed(openai_client, [query], operation="retrieval_embedding")[0]
+        query_vector = embed(openai_client, [query], operation="retrieval_embedding", usage_sink=usage_sink)[0]
     except Exception as error:
         failure("embedding", error)
         raise

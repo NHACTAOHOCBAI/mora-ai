@@ -82,7 +82,7 @@ sequenceDiagram
 ### Luồng RAG chi tiết
 
 1. Router chọn `RAG` khi câu hỏi liên quan tới kiến thức/tài liệu; người dùng có thể giới hạn phạm vi bằng `documentIds`.
-2. Retrieval dùng `OPENAI_EMBEDDING_MODEL` để embed câu hỏi, tìm vector trong collection OpenAI và từ khóa qua BM25.
+2. Retrieval dùng embedding model đã cấu hình trên Admin để embed câu hỏi, tìm vector trong collection OpenAI và từ khóa qua BM25.
 3. Reciprocal Rank Fusion (RRF) hợp nhất hai tập kết quả thành tối đa 20 candidate. FlashRank rerank candidate và trả `RETRIEVAL_TOP_K` chunk tốt nhất; nếu FlashRank lỗi, thứ hạng RRF là phương án dự phòng.
 4. Synthesis Agent chỉ dẫn OpenAI trả lời bám sát context và trả citation có `documentId`, `documentName`, `pageNumber` và quote. AI Service gộp citation trùng tài liệu/trang trước khi trả về Backend.
 5. Evaluator Agent kiểm tra answer với context. Nếu không faithful và điểm dưới `0.7`, service synthesis lại tối đa một lần nữa (hai attempt tổng cộng).
@@ -128,15 +128,12 @@ cd ../mora-ai
 
 ## Cấu hình môi trường
 
-Sao chép `.env.example` thành `.env` trong `mora-ai`, rồi đặt `OPENAI_API_KEY`.
-Key không nằm trong frontend, backend Java hoặc request HTTP giữa các service.
+Sao chép `.env.example` thành `.env` trong `mora-ai`, rồi đặt `AI_SERVICE_INTERNAL_KEY` trùng với Backend. Sau đó cấu hình OpenAI trong trang Admin; AI service không đọc provider key, model hoặc bảng giá từ `.env`.
+Key không nằm trong frontend hoặc request HTTP từ trình duyệt.
 
 | Biến | Mặc định | Mục đích |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | Bắt buộc | Key chung phía máy chủ |
-| `OPENAI_MODEL` | `gpt-5-mini` | Chat, router, evaluator, tóm tắt |
-| `OPENAI_PARSER_MODEL` | `gpt-5-mini` | Đọc PDF từng trang qua Responses API |
-| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding 1536 chiều |
+| `AI_SERVICE_INTERNAL_KEY` | Bắt buộc | Secret để AI service đọc cấu hình Admin |
 | `OPENAI_TIMEOUT` | `60` | Timeout mỗi lần gọi, giây |
 | `OPENAI_MAX_RETRIES` | `2` | Số lần SDK thử lại tối đa |
 | `RETRIEVAL_ENABLED` | `false` | Chỉ bật sau khi lập lại chỉ mục thành công |
@@ -148,7 +145,7 @@ Có thể điều chỉnh `RETRIEVAL_TOP_K`, `RETRIEVAL_DENSE_LIMIT` và `RETRIE
 
 ## Chuyển chỉ mục sang OpenAI
 
-1. Tạm ngừng nhận chat/tải tài liệu trong thời gian bảo trì. Khởi động AI Service với key hợp lệ và `RETRIEVAL_ENABLED=false`.
+1. Tạm ngừng nhận chat/tải tài liệu trong thời gian bảo trì. Đảm bảo cấu hình OpenAI hợp lệ trên Admin và `RETRIEVAL_ENABLED=false`.
 2. Khởi động backend với `AI_REINDEX_ON_STARTUP=true`. Tác vụ đọc nội dung trang đã lưu của tài liệu `READY`, `INDEXING`, `FAILED`, tạo embedding và ghi vào `mora_chunks_openai_v1`. Không đọc lại PDF hay sửa hội thoại. Tài liệu chưa có trang lưu sẽ báo thất bại, cần xử lý lại tài liệu đó.
 3. Kiểm tra log `OpenAI reindex complete: success=..., failed=0`. Nếu có lỗi, backend không hoàn tất startup; sửa lỗi rồi chạy lại. ID chunk ổn định, chunk cũ không còn trong tài liệu được dọn sau khi ghi chunk mới thành công.
 4. Đặt lại `AI_REINDEX_ON_STARTUP=false`; bật `RETRIEVAL_ENABLED=true`, khởi động lại AI Service/backend rồi mở lại ứng dụng. Cài đặt mới chưa có tài liệu vẫn thực hiện bước kiểm tra với tổng 0 tài liệu.
