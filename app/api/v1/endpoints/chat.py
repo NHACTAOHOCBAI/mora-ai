@@ -25,10 +25,10 @@ def chat_endpoint(request: ChatRequest):
 @router.post("/chat/stream")
 def chat_stream_endpoint(request: ChatRequest):
     def sse():
+        usage = []
         try:
-            with collect_usage() as usage:
-                for event_name, payload in generate_chat_response_stream(request, usage_sink=usage):
-                    yield f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+            for event_name, payload in generate_chat_response_stream(request, usage_sink=usage):
+                yield f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
         except RuntimeConfigurationError:
             yield f"event: error\ndata: {json.dumps({'message': AI_CONFIGURATION_ERROR}, ensure_ascii=False)}\n\n"
         except Exception:
