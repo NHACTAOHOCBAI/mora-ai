@@ -3,7 +3,7 @@ import time
 from typing import List, Tuple, Optional
 from pydantic import BaseModel
 from loguru import logger
-from app.services.openai_service import get_client, generate, AI_ERROR
+from app.services.openai_service import get_client, generate, stream_text, AI_ERROR
 
 from app.core.config import settings
 from app.core.execution_trace import event, failure, execution_trace
@@ -29,6 +29,9 @@ class EvaluationSchema(BaseModel):
     is_faithful: bool
     hallucinations: List[str]
     score: float  # 0.0 to 1.0
+
+class CitationListSchema(BaseModel):
+    citations: List[CitationSchema]
 
 class MultiAgentOrchestrator:
     def __init__(self):
@@ -361,6 +364,67 @@ def generate_chat_response(request: ChatRequest) -> ChatResponse:
         answer=answer,
         citations=citations_mapped,
     )
+
+def generate_chat_response_stream(request: ChatRequest):
+    """Run routing/retrieval first, then yield answer text as OpenAI generates it.
+
+    Citations are extracted after text generation so they never block the first token.
+    """
+    orchestrator = MultiAgentOrchestrator()
+    history = [{"sender": h.sender, "text": h.text} for h in request.history]
+    space_id = request.space_id or request.spaceId
+    document_ids = request.document_ids if request.document_ids is not None else request.documentIds
+    raw_context = [{"pageNumber": c.pageNumber, "text": c.text, "documentName": c.documentName,
+                    "documentId": c.documentId, "sectionPath": c.sectionPath} for c in (request.context or [])]
+    # Streaming must not wait for a separate router-model completion.  In a Space,
+    # an explicit ready-document scope is the user's intent to ask the documents.
+    context = []
+    intent = "RAG" if document_ids else "GENERAL"
+    if intent == "RAG":
+        yield "status", {"stage": "retrieving"}
+        context = orchestrator.retrieval_agent(request.question, space_id, raw_context, document_ids)
+
+    if intent == "RAG" and context:
+        context_str = "\n---\n".join(
+            f"Tài liệu: {c.get('documentName') or c.get('documentId')} | Trang: {c.get('pageNumber')}\n{c.get('text', '')}"
+            for c in context)
+        instructions = ("Bạn là trợ lý học tập Mora. Chỉ trả lời bằng thông tin được hỗ trợ bởi tài liệu. "
+                        "Nếu thiếu dữ kiện, nói rõ phần nào không có trong tài liệu. Dùng Markdown rõ ràng.")
+        prompt = f"--- TÀI LIỆU ---\n{context_str}\n--- LỊCH SỬ ---\n" + \
+                 "\n".join(f"{h['sender']}: {h['text']}" for h in history[-12:]) + \
+                 f"\n--- CÂU HỎI ---\n{request.question}"
+    else:
+        if intent == "RAG":
+            prefix = "⚠️ *Tài liệu học tập không chứa thông tin để trả lời câu hỏi này. Tuy nhiên, dựa trên kiến thức chung của AI:*\n\n"
+        else:
+            prefix = ""
+        instructions = ("Bạn là Trợ lý Học tập AI Mora. Trả lời tự nhiên, chính xác, dùng Markdown rõ ràng "
+                        "với tiêu đề và danh sách khi phù hợp.")
+        prompt = "--- LỊCH SỬ ---\n" + "\n".join(f"{h['sender']}: {h['text']}" for h in history[-12:]) + f"\n--- CÂU HỎI ---\n{request.question}"
+        if prefix:
+            yield "delta", {"text": prefix}
+
+    yield "status", {"stage": "generating"}
+    answer_parts = []
+    for delta in stream_text(orchestrator.client, orchestrator.chat_model, prompt, instructions):
+        answer_parts.append(delta)
+        yield "delta", {"text": delta}
+    answer = "".join(answer_parts)
+
+    citations = []
+    if intent == "RAG" and context and answer.strip():
+        yield "status", {"stage": "citing"}
+        citation_prompt = (f"Câu trả lời:\n{answer}\n\nNgữ cảnh:\n" +
+                           "\n---\n".join(json.dumps(c, ensure_ascii=False) for c in context) +
+                           "\n\nChỉ trả các trích dẫn trực tiếp hỗ trợ câu trả lời.")
+        citation_instruction = "Trích xuất citations chính xác từ ngữ cảnh. Không bịa quote, trang hoặc tài liệu."
+        try:
+            result = json.loads(generate(orchestrator.client, orchestrator.chat_model, citation_prompt,
+                                         citation_instruction, CitationListSchema, operation="rag_citations"))
+            citations = result.get("citations", [])
+        except Exception as error:
+            failure("citations", error)
+    yield "citations", {"citations": citations}
 
 def generate_chat_summary(request: ChatSummarizeRequest) -> ChatSummarizeResponse:
     client = get_client()

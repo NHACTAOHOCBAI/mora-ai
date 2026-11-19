@@ -36,6 +36,19 @@ def generate(client, model, prompt, instructions, schema=None, operation="chat")
         safe_error.status_code = getattr(error, "status_code", None)
         raise safe_error from None
 
+def stream_text(client, model, prompt, instructions):
+    """Yield text deltas from Responses API without buffering the full answer."""
+    try:
+        with client.responses.stream(model=model, input=prompt, instructions=instructions,
+                                     store=False) as stream:
+            for event in stream:
+                if event.type == "response.output_text.delta":
+                    yield event.delta
+    except OpenAIError as error:
+        logger.error("OpenAI streaming request failed: type={}, HTTP={}", type(error).__name__,
+                     getattr(error, "status_code", None))
+        raise RuntimeError(AI_ERROR) from None
+
 def embed(client, texts, operation="embedding"):
     response = client.embeddings.create(model=settings.openai_embedding_model,
                                         input=texts, dimensions=1536)
